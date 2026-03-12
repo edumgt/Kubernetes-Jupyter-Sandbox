@@ -1,0 +1,22 @@
+#cloud-config
+autoinstall:
+  version: 1
+  identity:
+    hostname: nginx-sre
+    username: ubuntu
+    password: "$6$rounds=4096$abcdefghijklmnopqrst$B5M6d3VYQ8W0h0fF0sQ4t6h4iQvO3w2c1m4v8Jxv5T7y6S7Fv8y6c3l9CjC9mPzM4Ciq9Qe8bWJrjXrQepKQW0"
+  ssh:
+    install-server: true
+    allow-pw: true
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  storage:
+    layout:
+      name: direct
+  packages:
+    - open-vm-tools
+    - curl
+    - ca-certificates
+  user-data:
+    disable_root: true

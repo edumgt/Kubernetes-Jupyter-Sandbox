@@ -1,0 +1,39 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Node CPU Seconds",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{"expr": "rate(node_cpu_seconds_total{mode!='idle'}[5m])", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "NGINX Connections",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "nginx_connections_active", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Available",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{"expr": "node_memory_MemAvailable_bytes", "refId": "A"}]
+    },
+    {
+      "type": "logs",
+      "title": "Nginx Logs",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "loki", "uid": "-- Grafana --"},
+      "targets": [{"expr": "{job=\"hostlogs\"}", "refId": "A"}]
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["nginx", "sre"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "title": "NGINX SRE Overview",
+  "version": 1
+}

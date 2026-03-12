@@ -1,0 +1,39 @@
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - wget
+      - jq
+      - vim
+      - unzip
+      - gnupg
+      - lsb-release
+      - ca-certificates
+      - software-properties-common
+      - apt-transport-https
+      - chrony
+      - logrotate
+      - unattended-upgrades
+      - acl
+    state: present
+    update_cache: true
+
+- name: Ensure chrony started
+  service:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Copy healthcheck script
+  copy:
+    src: ../../../scripts/healthcheck.sh
+    dest: /usr/local/bin/healthcheck.sh
+    mode: '0755'
+
+- name: Configure unattended upgrades
+  copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: '0644'
