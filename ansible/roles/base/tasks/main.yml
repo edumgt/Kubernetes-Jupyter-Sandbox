@@ -1,20 +1,23 @@
 - name: Install base packages
   apt:
     name:
-      - curl
-      - wget
-      - jq
-      - vim
-      - unzip
-      - gnupg
-      - lsb-release
-      - ca-certificates
-      - software-properties-common
-      - apt-transport-https
-      - chrony
-      - logrotate
-      - unattended-upgrades
       - acl
+      - apt-transport-https
+      - ca-certificates
+      - chrony
+      - curl
+      - git
+      - gnupg
+      - jq
+      - logrotate
+      - make
+      - net-tools
+      - software-properties-common
+      - tar
+      - unzip
+      - unattended-upgrades
+      - vim
+      - wget
     state: present
     update_cache: true
 
@@ -24,7 +27,7 @@
     enabled: true
     state: started
 
-- name: Copy healthcheck script
+- name: Copy platform healthcheck script
   copy:
     src: ../../../scripts/healthcheck.sh
     dest: /usr/local/bin/healthcheck.sh

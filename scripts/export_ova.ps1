@@ -1,6 +1,6 @@
 Param(
-  [string]$VmName = "nginx-sre",
-  [string]$OutputDir = ".\packer\output-nginx-sre",
+  [string]$VmName = "k8s-data-platform",
+  [string]$OutputDir = ".\packer\output-k8s-data-platform",
   [string]$DistDir = ".\dist",
   [string]$OvfTool = "C:\Program Files\VMware\VMware OVF Tool\ovftool.exe"
 )

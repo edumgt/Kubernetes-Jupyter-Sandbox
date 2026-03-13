@@ -1,8 +1,8 @@
 - name: Install security packages
   apt:
     name:
-      - ufw
       - fail2ban
+      - ufw
     state: present
 
 - name: Default deny incoming
@@ -27,16 +27,40 @@
     port: '80'
     proto: tcp
 
-- name: Allow Node Exporter
+- name: Allow HTTPS
   community.general.ufw:
     rule: allow
-    port: '9100'
+    port: '443'
     proto: tcp
 
-- name: Allow Nginx Exporter
+- name: Allow k3s API
   community.general.ufw:
     rule: allow
-    port: '9113'
+    port: '6443'
+    proto: tcp
+
+- name: Allow frontend NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30080'
+    proto: tcp
+
+- name: Allow backend NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30081'
+    proto: tcp
+
+- name: Allow Jupyter NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30088'
+    proto: tcp
+
+- name: Allow Airflow NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30090'
     proto: tcp
 
 - name: Enable UFW

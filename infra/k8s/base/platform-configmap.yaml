@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-config
+data:
+  PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform
+  PLATFORM_REDIS_URL: redis://redis:6379/0
+  PLATFORM_AIRFLOW_URL: http://airflow:8080
+  PLATFORM_JUPYTER_URL: http://jupyter:8888/lab
+  PLATFORM_GITLAB_URL: http://gitlab.local:8929
+  PLATFORM_HARBOR_URL: http://harbor.local:30083
+  PLATFORM_NOTEBOOKS_PATH: /workspace/notebooks
+  PLATFORM_TERADATA_DATABASE: dbc
+  PLATFORM_TERADATA_FAKE_MODE: "true"

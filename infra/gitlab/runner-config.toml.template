@@ -1,0 +1,16 @@
+concurrent = 2
+check_interval = 0
+
+[[runners]]
+  name = "platform-docker-runner"
+  url = "http://gitlab:8929/"
+  token = "REPLACE_ME"
+  executor = "docker"
+
+  [runners.docker]
+    image = "docker:27.4.1-cli"
+    privileged = true
+    disable_entrypoint_overwrite = false
+    oom_kill_disable = false
+    tls_verify = false
+    volumes = ["/cache", "/var/run/docker.sock:/var/run/docker.sock"]

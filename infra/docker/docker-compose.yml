@@ -1,0 +1,85 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: platform-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: platform-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  backend:
+    build:
+      context: ../../apps/backend
+    container_name: platform-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - redis
+      - airflow
+      - jupyter
+    environment:
+      PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform
+      PLATFORM_REDIS_URL: redis://redis:6379/0
+      PLATFORM_AIRFLOW_URL: http://localhost:8080
+      PLATFORM_JUPYTER_URL: http://localhost:8888/lab
+      PLATFORM_GITLAB_URL: http://localhost:8929
+      PLATFORM_HARBOR_URL: http://harbor.local:30083
+      PLATFORM_NOTEBOOKS_PATH: /workspace/notebooks
+      PLATFORM_TERADATA_FAKE_MODE: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../apps/jupyter/work:/workspace/notebooks:ro
+
+  frontend:
+    build:
+      context: ../../apps/frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    container_name: platform-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+  airflow:
+    build:
+      context: ../../apps/airflow
+    container_name: platform-airflow
+    restart: unless-stopped
+    command: ["bash", "-lc", "airflow standalone"]
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    ports:
+      - "8080:8080"
+
+  jupyter:
+    build:
+      context: ../../apps/jupyter
+    container_name: platform-jupyter
+    restart: unless-stopped
+    environment:
+      JUPYTER_TOKEN: platform123
+      PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform
+      PLATFORM_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../../apps/jupyter/work:/workspace/notebooks
+
+volumes:
+  mongo-data:
+  redis-data:

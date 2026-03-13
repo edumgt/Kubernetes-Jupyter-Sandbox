@@ -1,0 +1,12 @@
+dist/
+packer/output-*/
+apps/frontend/node_modules/
+apps/frontend/dist/
+apps/backend/.venv/
+apps/jupyter/.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+*.log
+infra/gitlab/data/
+infra/gitlab/runner-config.toml

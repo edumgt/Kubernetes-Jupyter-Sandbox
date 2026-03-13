@@ -1,0 +1,169 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 197, 87, 0.45), transparent 24rem),
+    radial-gradient(circle at top right, rgba(27, 111, 140, 0.22), transparent 28rem),
+    linear-gradient(180deg, #f6f0e7 0%, #f2f5f8 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: transparent;
+  color: #12222f;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 20px 72px;
+}
+
+.hero-panel {
+  position: relative;
+  overflow: hidden;
+  padding: 32px;
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(246, 240, 231, 0.92)),
+    linear-gradient(135deg, #f1b24a, #17485b);
+  box-shadow: 0 30px 80px rgba(18, 34, 47, 0.12);
+}
+
+.hero-panel::after {
+  content: "";
+  position: absolute;
+  inset: auto -4rem -4rem auto;
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  background: rgba(18, 34, 47, 0.08);
+}
+
+.hero-panel h1 {
+  margin: 8px 0 16px;
+  max-width: 780px;
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  line-height: 1.02;
+}
+
+.hero-panel p {
+  max-width: 760px;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.eyebrow {
+  display: inline-flex;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(18, 34, 47, 0.08);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.section-grid,
+.content-grid {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.section-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.content-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.status-card,
+.surface-card {
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(18, 34, 47, 0.08);
+}
+
+.card-label,
+.section-title {
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #637684;
+}
+
+.card-title {
+  margin-top: 6px;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.card-endpoint,
+.muted,
+.link-description,
+.card-detail {
+  margin-top: 10px;
+  color: #50616e;
+  line-height: 1.55;
+}
+
+.chip-grid,
+.button-grid,
+.notebook-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.button-grid {
+  margin-top: 12px;
+}
+
+.link-button {
+  min-width: 220px;
+  justify-content: flex-start;
+}
+
+.link-title {
+  font-weight: 700;
+}
+
+.sql-preview {
+  white-space: normal;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.banner-note {
+  background: #ecf2f5;
+  color: #173240;
+}
+
+.result-table {
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    padding: 18px 14px 48px;
+  }
+
+  .hero-panel {
+    padding: 22px;
+  }
+}

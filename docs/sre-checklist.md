@@ -1,29 +1,12 @@
 # SRE Checklist
 
-## Reliability
-- [ ] `/healthz` 응답 확인
-- [ ] NGINX systemd restart 정책 확인
-- [ ] time sync(chrony) 정상 확인
-- [ ] 디스크 사용률 80% 이하 확인
-
-## Observability
-- [ ] node exporter 메트릭 수집 확인
-- [ ] nginx exporter 메트릭 수집 확인
-- [ ] Grafana 대시보드 정상 확인
-- [ ] Loki 로그 수집 확인
-
-## Security
-- [ ] UFW 활성화 확인
-- [ ] fail2ban 정상 동작 확인
-- [ ] SSH 접근 정책 확인
-- [ ] unattended-upgrades 설정 확인
-
-## Performance
-- [ ] p95 응답시간 측정
-- [ ] worker_connections / keepalive 설정 확인
-- [ ] access log volume / rotation 확인
-
-## Operational Readiness
-- [ ] Runbook 최신화
-- [ ] 복구 절차 문서화
-- [ ] Import / Export 절차 재현 확인
+- [ ] `systemctl status docker` 가 `active (running)` 인가
+- [ ] `systemctl status k3s` 가 `active (running)` 인가
+- [ ] `kubectl get nodes` 결과가 `Ready` 인가
+- [ ] `kubectl get pods -n data-platform` 에서 핵심 워크로드가 정상 기동되는가
+- [ ] Frontend `30080`, Backend `30081`, Jupyter `30088`, Airflow `30090` 접근이 가능한가
+- [ ] MongoDB / Redis 가 Backend 헬스 응답에 반영되는가
+- [ ] Jupyter pod 에서 노트북 파일이 보이는가
+- [ ] Airflow DAG `platform_health_check` 가 로드되는가
+- [ ] GitLab CI 가 Harbor 로 이미지를 push 할 수 있는가
+- [ ] 보안 그룹/UFW 에서 운영 포트만 열려 있는가

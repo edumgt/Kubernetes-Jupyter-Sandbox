@@ -25,10 +25,10 @@ make_fixture() {
   local fixture_dir
   fixture_dir="$(mktemp -d)"
 
-  mkdir -p "${fixture_dir}/scripts" "${fixture_dir}/packer/output-nginx-sre" "${fixture_dir}/dist"
+  mkdir -p "${fixture_dir}/scripts" "${fixture_dir}/packer/output-k8s-data-platform" "${fixture_dir}/dist"
   cp "${SOURCE_SCRIPT}" "${fixture_dir}/scripts/build_ova.sh"
   chmod +x "${fixture_dir}/scripts/build_ova.sh"
-  : > "${fixture_dir}/packer/output-nginx-sre/nginx-sre.vmx"
+  : > "${fixture_dir}/packer/output-k8s-data-platform/k8s-data-platform.vmx"
 
   echo "${fixture_dir}"
 }
@@ -50,16 +50,16 @@ EOF
   chmod +x "${tool_path}"
 
   cat > "${fixture_dir}/packer/variables.pkr.hcl" <<EOF
-vm_name              = "nginx-sre"
-output_directory     = "output-nginx-sre"
+vm_name              = "k8s-data-platform"
+output_directory     = "output-k8s-data-platform"
 ovftool_path_windows = "${tool_path}"
 EOF
 
   bash "${fixture_dir}/scripts/build_ova.sh" >/tmp/test_build_ova_native.out
 
-  assert_file "${fixture_dir}/dist/nginx-sre.ova"
-  assert_contains "${args_log}" "${fixture_dir}/packer/output-nginx-sre/nginx-sre.vmx"
-  assert_contains "${args_log}" "${fixture_dir}/dist/nginx-sre.ova"
+  assert_file "${fixture_dir}/dist/k8s-data-platform.ova"
+  assert_contains "${args_log}" "${fixture_dir}/packer/output-k8s-data-platform/k8s-data-platform.vmx"
+  assert_contains "${args_log}" "${fixture_dir}/dist/k8s-data-platform.ova"
 }
 
 run_wsl_windows_tool_test() {
@@ -103,16 +103,16 @@ EOF
   chmod +x "${tool_path}"
 
   cat > "${fixture_dir}/packer/variables.pkr.hcl" <<'EOF'
-vm_name              = "nginx-sre"
-output_directory     = "output-nginx-sre"
+vm_name              = "k8s-data-platform"
+output_directory     = "output-k8s-data-platform"
 ovftool_path_windows = "C:\Program Files\VMware\VMware OVF Tool\ovftool.exe"
 EOF
 
   PATH="${bin_dir}:${PATH}" WSL_DISTRO_NAME="Ubuntu-Test" bash "${fixture_dir}/scripts/build_ova.sh" >/tmp/test_build_ova_wsl.out
 
-  assert_file "${fixture_dir}/dist/nginx-sre.ova"
-  assert_contains "${args_log}" "WIN:${fixture_dir}/packer/output-nginx-sre/nginx-sre.vmx"
-  assert_contains "${args_log}" "WIN:${fixture_dir}/dist/nginx-sre.ova"
+  assert_file "${fixture_dir}/dist/k8s-data-platform.ova"
+  assert_contains "${args_log}" "WIN:${fixture_dir}/packer/output-k8s-data-platform/k8s-data-platform.vmx"
+  assert_contains "${args_log}" "WIN:${fixture_dir}/dist/k8s-data-platform.ova"
 }
 
 main() {

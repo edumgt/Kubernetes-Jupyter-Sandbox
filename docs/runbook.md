@@ -1,59 +1,63 @@
 # Runbook
 
-## 1. 서비스 상태 확인
+## 1. 호스트 상태 확인
 
 ```bash
-systemctl status nginx
-systemctl status node_exporter
-systemctl status nginx-prometheus-exporter
-systemctl status promtail
+systemctl status docker
+systemctl status k3s
 ```
 
-## 2. 포트 확인
+## 2. 클러스터 상태 확인
 
 ```bash
-ss -tulpn | egrep '80|9100|9113'
+kubectl get nodes
+kubectl get pods -n data-platform
+kubectl get svc -n data-platform
 ```
 
-## 3. 헬스체크
+## 3. 플랫폼 배포
 
 ```bash
-bash /usr/local/bin/healthcheck.sh
+platform-apply.sh
 ```
 
-## 4. 로그 확인
+## 4. 애플리케이션 포트
 
 ```bash
-journalctl -u nginx -n 100 --no-pager
-journalctl -u promtail -n 100 --no-pager
+ss -tulpn | egrep '6443|30080|30081|30088|30090'
 ```
 
-## 5. 장애 복구 예시
+## 5. 로컬 컨테이너 스택
 
-### NGINX 재시작
 ```bash
-sudo systemctl restart nginx
+docker compose -f infra/docker/docker-compose.yml ps
 ```
 
-### 설정 검증 후 reload
+## 6. 장애 복구 예시
+
+### Docker 재시작
+
 ```bash
-sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl restart docker
 ```
 
-## 6. 방화벽 상태
+### k3s 재시작
+
+```bash
+sudo systemctl restart k3s
+```
+
+### 플랫폼 워크로드 재적용
+
+```bash
+kubectl rollout restart deployment/backend -n data-platform
+kubectl rollout restart deployment/frontend -n data-platform
+kubectl rollout restart deployment/jupyter -n data-platform
+```
+
+## 7. 보안 상태
 
 ```bash
 sudo ufw status verbose
-```
-
-## 7. Fail2ban 상태
-
-```bash
 sudo fail2ban-client status
-```
-
-## 8. 패키지 보안 업데이트 확인
-
-```bash
-sudo unattended-upgrade --dry-run --debug
 ```

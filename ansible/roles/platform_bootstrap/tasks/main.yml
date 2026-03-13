@@ -1,0 +1,51 @@
+- name: Ensure platform root exists
+  file:
+    path: /opt/k8s-data-platform
+    state: directory
+    mode: '0755'
+
+- name: Copy application sources to host
+  copy:
+    src: "{{ playbook_dir }}/../apps/"
+    dest: /opt/k8s-data-platform/apps/
+    mode: preserve
+
+- name: Copy infrastructure manifests to host
+  copy:
+    src: "{{ playbook_dir }}/../infra/"
+    dest: /opt/k8s-data-platform/infra/
+    mode: preserve
+
+- name: Install platform apply helper
+  copy:
+    dest: /usr/local/bin/platform-apply.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      sudo kubectl apply -k /opt/k8s-data-platform/infra/k8s/base
+      sudo kubectl get pods -n data-platform
+
+- name: Install platform status helper
+  copy:
+    dest: /usr/local/bin/platform-status.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      echo '[docker]'
+      sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+      echo
+      echo '[kubernetes]'
+      sudo kubectl get nodes
+      sudo kubectl get pods -n data-platform
+
+- name: Write host bootstrap note
+  copy:
+    dest: /opt/k8s-data-platform/README.host.md
+    mode: '0644'
+    content: |
+      # Host Quickstart
+      kubectl apply -k /opt/k8s-data-platform/infra/k8s/base
+      kubectl get pods -n data-platform
+      kubectl get svc -n data-platform

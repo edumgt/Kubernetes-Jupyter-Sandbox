@@ -47,12 +47,12 @@ test_build_ova_supports_windows_style_ovftool_path() (
   trap 'rm -rf "${tmp_dir}"' EXIT
 
   make_fixture_repo "${tmp_dir}"
-  mkdir -p "${tmp_dir}/packer/output-nginx-sre" "${tmp_dir}/bin"
-  : > "${tmp_dir}/packer/output-nginx-sre/nginx-sre.vmx"
+  mkdir -p "${tmp_dir}/packer/output-k8s-data-platform" "${tmp_dir}/bin"
+  : > "${tmp_dir}/packer/output-k8s-data-platform/k8s-data-platform.vmx"
 
   cat > "${tmp_dir}/packer/variables.pkr.hcl" <<'EOF'
-vm_name = "nginx-sre"
-output_directory = "output-nginx-sre"
+vm_name = "k8s-data-platform"
+output_directory = "output-k8s-data-platform"
 ovftool_path_windows = "C:\Tools\VMware OVF Tool\ovftool.exe"
 EOF
 
@@ -77,7 +77,7 @@ EOF
   chmod +x "${tmp_dir}/bin/wslpath" "${tmp_dir}/bin/ovftool.exe"
   PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/build_ova.sh"
 
-  assert_file_exists "${tmp_dir}/dist/nginx-sre.ova"
+  assert_file_exists "${tmp_dir}/dist/k8s-data-platform.ova"
 )
 
 test_run_wsl_executes_build_export_and_monitoring_flow() (
@@ -88,8 +88,8 @@ test_run_wsl_executes_build_export_and_monitoring_flow() (
   mkdir -p "${tmp_dir}/bin"
 
   cat > "${tmp_dir}/packer/variables.pkr.hcl" <<'EOF'
-vm_name = "nginx-sre"
-output_directory = "output-nginx-sre"
+vm_name = "k8s-data-platform"
+output_directory = "output-k8s-data-platform"
 ovftool_path_windows = "C:\Tools\VMware OVF Tool\ovftool.exe"
 EOF
 
@@ -101,8 +101,8 @@ case "\$1" in
     exit 0
     ;;
   build)
-    mkdir -p output-nginx-sre
-    : > output-nginx-sre/nginx-sre.vmx
+    mkdir -p output-k8s-data-platform
+    : > output-k8s-data-platform/k8s-data-platform.vmx
     exit 0
     ;;
 esac
@@ -136,10 +136,10 @@ EOF
   PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/run_wsl.sh" --with-monitoring
 
   assert_log_contains "${tmp_dir}/packer.log" "init ."
-  assert_log_contains "${tmp_dir}/packer.log" "validate -var-file=${tmp_dir}/packer/variables.pkr.hcl nginx-sre.pkr.hcl"
-  assert_log_contains "${tmp_dir}/packer.log" "build -var-file=${tmp_dir}/packer/variables.pkr.hcl nginx-sre.pkr.hcl"
+  assert_log_contains "${tmp_dir}/packer.log" "validate -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"
+  assert_log_contains "${tmp_dir}/packer.log" "build -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"
   assert_log_contains "${tmp_dir}/docker.log" "compose up -d"
-  assert_file_exists "${tmp_dir}/dist/nginx-sre.ova"
+  assert_file_exists "${tmp_dir}/dist/k8s-data-platform.ova"
 )
 
 run_test() {

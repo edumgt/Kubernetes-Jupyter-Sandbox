@@ -22,29 +22,29 @@ variable "output_directory" { type = string }
 variable "http_directory" { type = string }
 variable "headless" { type = bool }
 
-source "vmware-iso" "nginx_sre" {
-  vm_name              = var.vm_name
-  guest_os_type        = "ubuntu-64"
-  cpus                 = var.cpus
-  memory               = var.memory
-  disk_size            = var.disk_size
-  headless             = var.headless
-  output_directory     = var.output_directory
+source "vmware-iso" "k8s_data_platform" {
+  vm_name          = var.vm_name
+  guest_os_type    = "ubuntu-64"
+  cpus             = var.cpus
+  memory           = var.memory
+  disk_size        = var.disk_size
+  headless         = var.headless
+  output_directory = var.output_directory
   vmx_data = {
     "displayName" = var.vm_name
     "numvcpus"    = var.cpus
     "memsize"     = var.memory
   }
 
-  iso_url              = var.iso_url
-  iso_checksum         = var.iso_checksum
-  http_directory       = var.http_directory
+  iso_url        = var.iso_url
+  iso_checksum   = var.iso_checksum
+  http_directory = var.http_directory
 
-  communicator         = "ssh"
-  ssh_username         = var.ssh_username
-  ssh_password         = var.ssh_password
-  ssh_timeout          = "30m"
-  shutdown_command     = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
+  communicator     = "ssh"
+  ssh_username     = var.ssh_username
+  ssh_password     = var.ssh_password
+  ssh_timeout      = "30m"
+  shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
 
   boot_wait = "5s"
   boot_command = [
@@ -56,7 +56,7 @@ source "vmware-iso" "nginx_sre" {
 }
 
 build {
-  sources = ["source.vmware-iso.nginx_sre"]
+  sources = ["source.vmware-iso.k8s_data_platform"]
 
   provisioner "shell" {
     inline = [

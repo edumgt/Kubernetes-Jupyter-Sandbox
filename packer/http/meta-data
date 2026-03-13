@@ -1,2 +1,2 @@
-instance-id: nginx-sre-lab
-local-hostname: nginx-sre
+instance-id: k8s-data-platform-lab
+local-hostname: k8s-data-platform

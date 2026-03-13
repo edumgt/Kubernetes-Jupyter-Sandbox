@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKER_DIR="${ROOT_DIR}/packer"
-PACKER_TEMPLATE="nginx-sre.pkr.hcl"
+PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.pkr.hcl}"
 DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist}"
 WITH_MONITORING=0
@@ -51,7 +51,7 @@ Usage: bash scripts/run_wsl.sh [options]
 
 Options:
   --vars-file PATH      Use a specific Packer vars file.
-  --with-monitoring     Start docker compose after the OVA build flow.
+  --with-monitoring     Start the legacy monitoring compose stack after build.
   --skip-export         Skip the final OVA export step.
   --dry-run             Print the commands without executing them.
   -h, --help            Show this help.

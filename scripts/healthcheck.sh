@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-curl -fsS http://127.0.0.1/healthz >/dev/null
-systemctl is-active --quiet nginx
+systemctl is-active --quiet docker
+systemctl is-active --quiet k3s
+kubectl get nodes >/dev/null 2>&1 || sudo k3s kubectl get nodes >/dev/null
 exit 0

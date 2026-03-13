@@ -1,0 +1,84 @@
+from app.config import Settings
+
+
+def runtime_profile() -> dict[str, str]:
+    return {
+        "host_os": "Ubuntu 24",
+        "cluster": "k3s single-node",
+        "containers": "Docker",
+        "backend": "Python 3.12 / FastAPI",
+        "frontend": "Node 22.22 / Quasar Vue 3",
+        "orchestration": "Apache Airflow",
+        "workbench": "JupyterLab pod",
+        "data": "MongoDB, Redis, Teradata ANSI SQL",
+        "cicd": "GitLab, GitLab Runner, Harbor",
+    }
+
+
+def sample_queries() -> list[dict[str, str]]:
+    return [
+        {
+            "name": "active_workloads",
+            "description": "Airflow and Jupyter workloads currently tracked by the lab.",
+            "sql": (
+                "SELECT workload_name, owner_name, workload_status "
+                "FROM lab_workloads "
+                "WHERE workload_status <> 'STOPPED' "
+                "ORDER BY updated_at DESC;"
+            ),
+        },
+        {
+            "name": "dag_runtime_summary",
+            "description": "Recent DAG durations using ANSI SQL window functions.",
+            "sql": (
+                "SELECT dag_name, run_date, duration_seconds "
+                "FROM dag_runtime_summary "
+                "QUALIFY ROW_NUMBER() OVER "
+                "(PARTITION BY dag_name ORDER BY run_date DESC) <= 5;"
+            ),
+        },
+        {
+            "name": "jupyter_notebook_usage",
+            "description": "Notebook usage counts for shared data science workspaces.",
+            "sql": (
+                "SELECT notebook_name, owner_name, execution_count "
+                "FROM notebook_usage "
+                "ORDER BY execution_count DESC;"
+            ),
+        },
+    ]
+
+
+def quick_links(settings: Settings) -> list[dict[str, str]]:
+    return [
+        {
+            "name": "Backend API",
+            "url": "http://localhost:8000/docs",
+            "description": "FastAPI OpenAPI and health endpoints.",
+        },
+        {
+            "name": "Frontend",
+            "url": "http://localhost:3000",
+            "description": "Quasar dashboard for the platform lab.",
+        },
+        {
+            "name": "Airflow",
+            "url": settings.airflow_url.replace("airflow", "localhost"),
+            "description": "Workflow orchestration UI.",
+        },
+        {
+            "name": "Jupyter",
+            "url": settings.jupyter_url.replace("jupyter", "localhost"),
+            "description": "Notebook workbench pod.",
+        },
+        {
+            "name": "GitLab",
+            "url": settings.gitlab_url.replace("gitlab", "localhost"),
+            "description": "SCM and pipeline control plane.",
+        },
+        {
+            "name": "Harbor",
+            "url": settings.harbor_url,
+            "description": "Container image registry target.",
+        },
+    ]

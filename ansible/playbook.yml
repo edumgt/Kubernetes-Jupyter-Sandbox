@@ -5,6 +5,7 @@
   roles:
     - base
     - security
-    - nginx
-    - exporters
-    - logging
+    - container_runtime
+    - toolchains
+    - k3s
+    - platform_bootstrap

@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jupyter-workspace
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jupyter
+spec:
+  type: NodePort
+  selector:
+    app: jupyter
+  ports:
+    - port: 8888
+      targetPort: 8888
+      nodePort: 30088
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jupyter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jupyter
+  template:
+    metadata:
+      labels:
+        app: jupyter
+    spec:
+      containers:
+        - name: jupyter
+          image: harbor.local/data-platform/jupyter:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8888
+          env:
+            - name: JUPYTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: JUPYTER_TOKEN
+            - name: PLATFORM_MONGO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_MONGO_URL
+            - name: PLATFORM_REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_REDIS_URL
+          volumeMounts:
+            - name: jupyter-workspace
+              mountPath: /workspace/notebooks
+      volumes:
+        - name: jupyter-workspace
+          persistentVolumeClaim:
+            claimName: jupyter-workspace
