@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-runner
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: gitlab-runner
+  template:
+    metadata:
+      labels:
+        app: gitlab-runner
+    spec:
+      serviceAccountName: gitlab-runner
+      containers:
+        - name: gitlab-runner
+          image: gitlab/gitlab-runner:alpine-v17.10.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - gitlab-runner
+            - run
+            - --working-directory=/home/gitlab-runner
+            - --user=gitlab-runner
+          volumeMounts:
+            - name: runner-config
+              mountPath: /home/gitlab-runner/.gitlab-runner/config.toml
+              subPath: config.toml
+      volumes:
+        - name: runner-config
+          secret:
+            secretName: gitlab-runner-config

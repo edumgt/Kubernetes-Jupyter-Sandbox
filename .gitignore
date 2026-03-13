@@ -8,5 +8,4 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.log
-infra/gitlab/data/
-infra/gitlab/runner-config.toml
+infra/k8s/runner/secret.local.yaml

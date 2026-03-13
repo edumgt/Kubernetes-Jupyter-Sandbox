@@ -21,18 +21,6 @@
     port: '22'
     proto: tcp
 
-- name: Allow HTTP
-  community.general.ufw:
-    rule: allow
-    port: '80'
-    proto: tcp
-
-- name: Allow HTTPS
-  community.general.ufw:
-    rule: allow
-    port: '443'
-    proto: tcp
-
 - name: Allow k3s API
   community.general.ufw:
     rule: allow
@@ -57,10 +45,22 @@
     port: '30088'
     proto: tcp
 
+- name: Allow GitLab Web NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30089'
+    proto: tcp
+
 - name: Allow Airflow NodePort
   community.general.ufw:
     rule: allow
     port: '30090'
+    proto: tcp
+
+- name: Allow GitLab SSH NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30224'
     proto: tcp
 
 - name: Enable UFW

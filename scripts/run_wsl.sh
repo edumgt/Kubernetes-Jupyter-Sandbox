@@ -6,7 +6,6 @@ PACKER_DIR="${ROOT_DIR}/packer"
 PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.pkr.hcl}"
 DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist}"
-WITH_MONITORING=0
 SKIP_EXPORT=0
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -51,7 +50,6 @@ Usage: bash scripts/run_wsl.sh [options]
 
 Options:
   --vars-file PATH      Use a specific Packer vars file.
-  --with-monitoring     Start the legacy monitoring compose stack after build.
   --skip-export         Skip the final OVA export step.
   --dry-run             Print the commands without executing them.
   -h, --help            Show this help.
@@ -64,10 +62,6 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--vars-file requires a value"
       PACKER_VARS="$2"
       shift 2
-      ;;
-    --with-monitoring)
-      WITH_MONITORING=1
-      shift
       ;;
     --skip-export)
       SKIP_EXPORT=1
@@ -92,9 +86,6 @@ is_wsl || die "scripts/run_wsl.sh must be executed inside WSL."
 
 if [[ "${DRY_RUN}" != "1" ]]; then
   require_command packer
-  if [[ "${WITH_MONITORING}" == "1" ]]; then
-    require_command docker
-  fi
 fi
 
 log "Running packer init"
@@ -115,11 +106,6 @@ if [[ "${SKIP_EXPORT}" != "1" ]]; then
   else
     PACKER_VARS="${PACKER_VARS}" DIST_DIR="${DIST_DIR}" "${ROOT_DIR}/scripts/build_ova.sh"
   fi
-fi
-
-if [[ "${WITH_MONITORING}" == "1" ]]; then
-  log "Starting monitoring stack"
-  run_in_dir "${ROOT_DIR}/monitoring" docker compose up -d
 fi
 
 log "WSL run flow completed"

@@ -24,6 +24,6 @@ GitLab CI/CD 변수로 아래 값을 등록합니다.
 
 ## 운영 메모
 
-- 사내 TLS 인증서를 쓰는 Harbor라면 k3s/Docker 호스트에 해당 CA를 신뢰 저장소로 배포해야 합니다.
+- 사내 TLS 인증서를 쓰는 Harbor라면 k3s 노드와 build runner 에 해당 CA를 신뢰 저장소로 배포해야 합니다.
 - 첫 실습은 Harbor 프로젝트를 public 으로 두면 k8s image pull secret 없이 시작할 수 있습니다.
 - private project 를 쓰면 deployment 에 `imagePullSecrets` 를 추가하세요.

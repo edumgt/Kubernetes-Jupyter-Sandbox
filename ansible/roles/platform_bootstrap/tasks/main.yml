@@ -26,6 +26,16 @@
       sudo kubectl apply -k /opt/k8s-data-platform/infra/k8s/base
       sudo kubectl get pods -n data-platform
 
+- name: Install platform reset helper
+  copy:
+    dest: /usr/local/bin/platform-reset.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      sudo kubectl delete -k /opt/k8s-data-platform/infra/k8s/runner --ignore-not-found
+      sudo kubectl delete -k /opt/k8s-data-platform/infra/k8s/base --ignore-not-found
+
 - name: Install platform status helper
   copy:
     dest: /usr/local/bin/platform-status.sh
@@ -33,12 +43,11 @@
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      echo '[docker]'
-      sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-      echo
       echo '[kubernetes]'
       sudo kubectl get nodes
       sudo kubectl get pods -n data-platform
+      sudo kubectl get svc -n data-platform
+      sudo kubectl get pvc -n data-platform
 
 - name: Write host bootstrap note
   copy:
@@ -49,3 +58,4 @@
       kubectl apply -k /opt/k8s-data-platform/infra/k8s/base
       kubectl get pods -n data-platform
       kubectl get svc -n data-platform
+      kubectl get pvc -n data-platform

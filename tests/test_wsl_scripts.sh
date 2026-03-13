@@ -36,7 +36,7 @@ assert_log_contains() {
 make_fixture_repo() {
   local target="$1"
 
-  mkdir -p "${target}/scripts" "${target}/packer" "${target}/monitoring"
+  mkdir -p "${target}/scripts" "${target}/packer"
   cp "${REPO_ROOT}/scripts/build_ova.sh" "${target}/scripts/build_ova.sh"
   cp "${REPO_ROOT}/scripts/run_wsl.sh" "${target}/scripts/run_wsl.sh"
   chmod +x "${target}/scripts/build_ova.sh" "${target}/scripts/run_wsl.sh"
@@ -80,7 +80,7 @@ EOF
   assert_file_exists "${tmp_dir}/dist/k8s-data-platform.ova"
 )
 
-test_run_wsl_executes_build_export_and_monitoring_flow() (
+test_run_wsl_executes_build_and_export_flow() (
   tmp_dir="$(mktemp -d)"
   trap 'rm -rf "${tmp_dir}"' EXIT
 
@@ -109,11 +109,6 @@ esac
 exit 1
 EOF
 
-  cat > "${tmp_dir}/bin/docker" <<EOF
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> '${tmp_dir}/docker.log'
-EOF
-
   cat > "${tmp_dir}/bin/wslpath" <<EOF
 #!/usr/bin/env bash
 if [[ "\$1" == "-u" && "\$2" == 'C:\Tools\VMware OVF Tool\ovftool.exe' ]]; then
@@ -132,13 +127,12 @@ EOF
 touch "$4"
 EOF
 
-  chmod +x "${tmp_dir}/bin/packer" "${tmp_dir}/bin/docker" "${tmp_dir}/bin/wslpath" "${tmp_dir}/bin/ovftool.exe"
-  PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/run_wsl.sh" --with-monitoring
+  chmod +x "${tmp_dir}/bin/packer" "${tmp_dir}/bin/wslpath" "${tmp_dir}/bin/ovftool.exe"
+  PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/run_wsl.sh"
 
   assert_log_contains "${tmp_dir}/packer.log" "init ."
   assert_log_contains "${tmp_dir}/packer.log" "validate -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"
   assert_log_contains "${tmp_dir}/packer.log" "build -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"
-  assert_log_contains "${tmp_dir}/docker.log" "compose up -d"
   assert_file_exists "${tmp_dir}/dist/k8s-data-platform.ova"
 )
 
@@ -153,7 +147,7 @@ run_test() {
 }
 
 run_test test_build_ova_supports_windows_style_ovftool_path
-run_test test_run_wsl_executes_build_export_and_monitoring_flow
+run_test test_run_wsl_executes_build_and_export_flow
 
 if [[ "${TESTS_FAILED}" -ne 0 ]]; then
   printf '%s tests failed\n' "${TESTS_FAILED}" >&2

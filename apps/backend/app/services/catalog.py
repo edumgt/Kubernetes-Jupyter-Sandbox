@@ -5,13 +5,13 @@ def runtime_profile() -> dict[str, str]:
     return {
         "host_os": "Ubuntu 24",
         "cluster": "k3s single-node",
-        "containers": "Docker",
+        "containers": "OCI images on Kubernetes",
         "backend": "Python 3.12 / FastAPI",
         "frontend": "Node 22.22 / Quasar Vue 3",
         "orchestration": "Apache Airflow",
         "workbench": "JupyterLab pod",
         "data": "MongoDB, Redis, Teradata ANSI SQL",
-        "cicd": "GitLab, GitLab Runner, Harbor",
+        "cicd": "GitLab, GitLab Runner(k8s executor), Harbor",
     }
 
 
@@ -53,27 +53,27 @@ def quick_links(settings: Settings) -> list[dict[str, str]]:
     return [
         {
             "name": "Backend API",
-            "url": "http://localhost:8000/docs",
+            "url": "http://localhost:30081/docs",
             "description": "FastAPI OpenAPI and health endpoints.",
         },
         {
             "name": "Frontend",
-            "url": "http://localhost:3000",
+            "url": "http://localhost:30080",
             "description": "Quasar dashboard for the platform lab.",
         },
         {
             "name": "Airflow",
-            "url": settings.airflow_url.replace("airflow", "localhost"),
+            "url": settings.airflow_url,
             "description": "Workflow orchestration UI.",
         },
         {
             "name": "Jupyter",
-            "url": settings.jupyter_url.replace("jupyter", "localhost"),
+            "url": settings.jupyter_url,
             "description": "Notebook workbench pod.",
         },
         {
             "name": "GitLab",
-            "url": settings.gitlab_url.replace("gitlab", "localhost"),
+            "url": settings.gitlab_url,
             "description": "SCM and pipeline control plane.",
         },
         {

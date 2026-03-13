@@ -37,3 +37,15 @@ spec:
               value: "false"
             - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
               value: "true"
+            - name: _AIRFLOW_WWW_USER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: AIRFLOW_ADMIN_USERNAME
+            - name: _AIRFLOW_WWW_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: AIRFLOW_ADMIN_PASSWORD
+            - name: _AIRFLOW_WWW_USER_EMAIL
+              value: admin@example.com

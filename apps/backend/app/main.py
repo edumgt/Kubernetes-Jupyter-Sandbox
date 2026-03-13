@@ -90,6 +90,13 @@ def dashboard() -> DashboardResponse:
             "ok": True,
             "detail": "JupyterLab pod exposed on 8888 or NodePort 30088",
         },
+        {
+            "name": "gitlab",
+            "kind": "cicd",
+            "endpoint": settings.gitlab_url,
+            "ok": True,
+            "detail": "GitLab CE exposed on NodePort 30089 and SSH NodePort 30224",
+        },
     ]
 
     return DashboardResponse(

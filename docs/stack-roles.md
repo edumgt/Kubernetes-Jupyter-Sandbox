@@ -1,0 +1,63 @@
+# 기술 스택 역할 정리
+
+이 문서는 이 레포에서 사용하는 각 기술이 Kubernetes 중심 구조에서 어떤 역할을 맡는지 설명합니다.
+
+## 전체 관점
+
+이 레포는 `Ubuntu 24 OVA -> k3s 호스트 -> Kubernetes workload -> GitLab CI/CD -> Harbor` 흐름을 하나의 실습 환경으로 만든 구조입니다. 실행과 운영의 기준점은 `kubectl`, `manifest`, `kustomize` 입니다.
+
+## 솔루션별 역할
+
+| 기술 | 이 레포에서 맡는 역할 | 왜 이 솔루션을 썼는가 | 운영 포인트 |
+| --- | --- | --- | --- |
+| Ubuntu 24 | OVA 베이스 OS, k3s 호스트 런타임 | 최신 LTS 기반으로 k3s, Python 3.12 계열과 잘 맞음 | OVA 빌드 시 ISO/OVF Tool/VMware 경로만 맞추면 됨 |
+| Packer | Ubuntu 24 VM 이미지를 반복 가능하게 생성 | VM 구축 과정을 코드화하기 좋음 | [packer/k8s-data-platform.pkr.hcl](/home/Kubernetes-OVA-SRE-Archi/packer/k8s-data-platform.pkr.hcl#L1) 기준 |
+| Ansible | OVA 내부에 k3s, 도구 체인, manifest 파일을 배치 | 이미지 내부 구성을 재현 가능하게 유지 | [ansible/playbook.yml](/home/Kubernetes-OVA-SRE-Archi/ansible/playbook.yml#L1) 참조 |
+| Kubernetes(k3s) | 전체 플랫폼의 실제 실행 환경 | 단일 노드로도 pod/service/pvc/NodePort 구조를 실습 가능 | [infra/k8s/base/kustomization.yaml](/home/Kubernetes-OVA-SRE-Archi/infra/k8s/base/kustomization.yaml#L1) 기준 |
+| Docker/OCI image | 앱 이미지를 패키징하는 형식 | Harbor 와 GitLab CI 파이프라인에서 표준적으로 사용 | 런타임은 Docker Compose 가 아니라 Kubernetes deployment |
+| Kaniko | Docker daemon 없이 이미지를 build/push 하는 CI 빌더 | Kubernetes executor 와 궁합이 좋고 dind 의존도를 줄임 | [.gitlab-ci.yml](/home/Kubernetes-OVA-SRE-Archi/.gitlab-ci.yml#L1) 에서 사용 |
+| Python 3.12 | Backend API, Jupyter, Airflow DAG 생태계의 공통 언어 | 데이터/분석/운영 자동화를 한 언어로 다루기 좋음 | FastAPI, Jupyter, Airflow 검증에 재사용 |
+| FastAPI | 플랫폼 상태와 데이터 접근을 제공하는 Backend | Python 친화적이고 OpenAPI 제공이 쉬움 | [apps/backend/app/main.py](/home/Kubernetes-OVA-SRE-Archi/apps/backend/app/main.py#L13) |
+| Node 22.22 | Quasar 프론트엔드 빌드 체인 | Vue 3 / Vite 생태계에 맞는 안정적인 빌드 환경 | 런타임이 아니라 build stage 버전 고정용 |
+| Quasar Framework(Vue 3) | 운영 대시보드형 Frontend | 카드, 배너, 테이블 UI 를 빠르게 구성 가능 | [apps/frontend/src/App.vue](/home/Kubernetes-OVA-SRE-Archi/apps/frontend/src/App.vue#L1) |
+| MongoDB | 문서형 메타데이터 저장소 예시 | 작업 정의, 노트북 메타, 비정형 데이터 저장에 적합 | StatefulSet + PVC 로 배포 |
+| Redis | 캐시와 빠른 상태 저장소 | health, 세션, 빠른 키-값 저장 흐름을 보여주기 좋음 | 단일 Deployment 로 배포 |
+| Apache Airflow | 스케줄링과 오케스트레이션 | DAG 기반 파이프라인 실습에 적합 | [apps/airflow/dags/platform_health_dag.py](/home/Kubernetes-OVA-SRE-Archi/apps/airflow/dags/platform_health_dag.py#L1) |
+| JupyterLab | 분석/실험용 워크벤치 pod | 분석가가 cluster 안에서 바로 notebook 을 실행 가능 | Deployment + PVC 로 구성 |
+| Teradata SQL(ANSI SQL) | 기업 DW 질의 계층 예시 | 레거시 DW 와 현대 앱/노트북의 접점을 보여주기 위함 | 접속 정보가 없으면 mock 모드 |
+| GitLab | 소스 관리와 CI/CD 오케스트레이션 | self-hosted CI 흐름을 k8s 위에서 실습 가능 | GitLab CE 자체도 k8s Deployment 로 배포 |
+| GitLab Runner | GitLab job 실행기 | pipeline job 을 cluster 내부 pod 로 실행 | `k8s executor` 오버레이로 분리 |
+| Harbor | 컨테이너 이미지 레지스트리 | 이미지 저장, 릴리스, 보안 스캔 관점에서 유용 | 이 레포에서는 외부 Harbor 연계를 기본 가정 |
+
+## 레이어별 설명
+
+### 1. 이미지/호스트 레이어
+
+- `Ubuntu 24 + Packer + Ansible` 은 k3s 호스트 자체를 재현하는 레이어입니다.
+- 이 레이어를 통해 개발 환경 차이보다 Kubernetes 배포 결과에 집중할 수 있습니다.
+
+### 2. 애플리케이션 레이어
+
+- `FastAPI`, `MongoDB`, `Redis`, `Airflow`, `Jupyter`, `Quasar` 가 실제 사용자 워크로드 레이어입니다.
+- 모두 Kubernetes manifest 로 배포되며, pod/service/pvc 단위로 관리됩니다.
+
+### 3. 배포/운영 레이어
+
+- `GitLab + GitLab Runner + Harbor` 가 이미지 빌드와 배포 자동화 레이어입니다.
+- Runner 는 Docker executor 대신 Kubernetes executor 기준으로 설계했습니다.
+- 이미지 빌드는 `Kaniko` 로 수행해 non-k8s 실행 경로를 줄였습니다.
+
+## 실행 스크립트 역할
+
+| 스크립트 | 역할 |
+| --- | --- |
+| [scripts/apply_k8s.sh](/home/Kubernetes-OVA-SRE-Archi/scripts/apply_k8s.sh#L1) | 기본 플랫폼 manifest 적용 |
+| [scripts/reset_k8s.sh](/home/Kubernetes-OVA-SRE-Archi/scripts/reset_k8s.sh#L1) | 적용된 k8s 리소스 삭제 |
+| [scripts/status_k8s.sh](/home/Kubernetes-OVA-SRE-Archi/scripts/status_k8s.sh#L1) | node/pod/service/pvc 상태 확인 |
+| [scripts/run_wsl.sh](/home/Kubernetes-OVA-SRE-Archi/scripts/run_wsl.sh#L1) | OVA 빌드 자동화 |
+
+## 정리 기준
+
+- runtime/deploy/ops 관점에서 non-k8s 설정은 제거했습니다.
+- Docker Compose, 단일 호스트 서비스, 로컬 컨테이너 이름 기반 실행 흐름은 남기지 않았습니다.
+- GitLab Runner 는 선택형 k8s 오버레이로 분리했습니다.

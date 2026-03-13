@@ -7,9 +7,7 @@ export default defineConfig({
     vue({
       template: { transformAssetUrls },
     }),
-    quasar({
-      sassVariables: "src/quasar-variables.sass",
-    }),
+    quasar(),
   ],
   server: {
     host: "0.0.0.0",

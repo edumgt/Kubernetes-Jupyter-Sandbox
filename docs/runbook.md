@@ -3,7 +3,6 @@
 ## 1. 호스트 상태 확인
 
 ```bash
-systemctl status docker
 systemctl status k3s
 ```
 
@@ -13,49 +12,46 @@ systemctl status k3s
 kubectl get nodes
 kubectl get pods -n data-platform
 kubectl get svc -n data-platform
+kubectl get pvc -n data-platform
 ```
 
-## 3. 플랫폼 배포
+## 3. 플랫폼 적용
 
 ```bash
-platform-apply.sh
+bash scripts/apply_k8s.sh
 ```
 
-## 4. 애플리케이션 포트
+## 4. 플랫폼 초기화
 
 ```bash
-ss -tulpn | egrep '6443|30080|30081|30088|30090'
+bash scripts/reset_k8s.sh
 ```
 
-## 5. 로컬 컨테이너 스택
+## 5. 주요 NodePort 확인
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml ps
+kubectl get svc -n data-platform
 ```
 
 ## 6. 장애 복구 예시
 
-### Docker 재시작
-
-```bash
-sudo systemctl restart docker
-```
-
-### k3s 재시작
-
 ```bash
 sudo systemctl restart k3s
-```
-
-### 플랫폼 워크로드 재적용
-
-```bash
 kubectl rollout restart deployment/backend -n data-platform
 kubectl rollout restart deployment/frontend -n data-platform
 kubectl rollout restart deployment/jupyter -n data-platform
+kubectl rollout restart deployment/airflow -n data-platform
+kubectl rollout restart deployment/gitlab -n data-platform
 ```
 
-## 7. 보안 상태
+## 7. Runner 활성화
+
+```bash
+kubectl apply -k infra/k8s/runner
+kubectl scale deployment/gitlab-runner -n data-platform --replicas=1
+```
+
+## 8. 보안 상태
 
 ```bash
 sudo ufw status verbose

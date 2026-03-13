@@ -5,7 +5,6 @@
   roles:
     - base
     - security
-    - container_runtime
     - toolchains
     - k3s
     - platform_bootstrap

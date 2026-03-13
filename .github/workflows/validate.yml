@@ -5,26 +5,42 @@ on:
   pull_request:
 
 jobs:
-  lint:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
+
       - name: Install ansible-lint
         run: |
           python -m pip install --upgrade pip
           pip install ansible ansible-lint
+
       - name: Ansible lint
         run: ansible-lint ansible/playbook.yml || true
-      - name: Check scripts executable style
+
+      - name: Check shell scripts
         run: |
           bash -n scripts/build_ova.sh
           bash -n scripts/run_wsl.sh
+          bash -n scripts/apply_k8s.sh
+          bash -n scripts/reset_k8s.sh
+          bash -n scripts/status_k8s.sh
           bash -n scripts/healthcheck.sh
           bash -n scripts/verify.sh
           bash -n tests/test_wsl_scripts.sh
+
+      - name: Python compile
+        run: python -m compileall apps/backend/app apps/airflow/dags
+
+      - name: Validate kustomize renders
+        run: |
+          kubectl kustomize infra/k8s/base >/dev/null
+          kubectl kustomize infra/k8s/runner >/dev/null
+
       - name: Run shell tests
         run: bash tests/test_wsl_scripts.sh

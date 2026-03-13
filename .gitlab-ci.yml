@@ -4,7 +4,6 @@ stages:
   - deploy
 
 variables:
-  DOCKER_TLS_CERTDIR: "/certs"
   IMAGE_PREFIX: "$HARBOR_REGISTRY/$HARBOR_PROJECT"
 
 python_sanity:
@@ -13,36 +12,26 @@ python_sanity:
   script:
     - python -m compileall apps/backend/app apps/airflow/dags
 
-docker_build_and_push:
+kaniko_build_and_push:
   stage: build
-  image: docker:27.4.1-cli
-  services:
-    - docker:27.4.1-dind
-  before_script:
-    - echo "$HARBOR_PASSWORD" | docker login "$HARBOR_REGISTRY" -u "$HARBOR_USER" --password-stdin
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   script:
-    - docker build -t "$IMAGE_PREFIX/backend:$CI_COMMIT_SHORT_SHA" apps/backend
-    - docker build -t "$IMAGE_PREFIX/frontend:$CI_COMMIT_SHORT_SHA" apps/frontend --build-arg VITE_API_BASE_URL=http://localhost:30081
-    - docker build -t "$IMAGE_PREFIX/airflow:$CI_COMMIT_SHORT_SHA" apps/airflow
-    - docker build -t "$IMAGE_PREFIX/jupyter:$CI_COMMIT_SHORT_SHA" apps/jupyter
-    - docker tag "$IMAGE_PREFIX/backend:$CI_COMMIT_SHORT_SHA" "$IMAGE_PREFIX/backend:latest"
-    - docker tag "$IMAGE_PREFIX/frontend:$CI_COMMIT_SHORT_SHA" "$IMAGE_PREFIX/frontend:latest"
-    - docker tag "$IMAGE_PREFIX/airflow:$CI_COMMIT_SHORT_SHA" "$IMAGE_PREFIX/airflow:latest"
-    - docker tag "$IMAGE_PREFIX/jupyter:$CI_COMMIT_SHORT_SHA" "$IMAGE_PREFIX/jupyter:latest"
-    - docker push "$IMAGE_PREFIX/backend:$CI_COMMIT_SHORT_SHA"
-    - docker push "$IMAGE_PREFIX/frontend:$CI_COMMIT_SHORT_SHA"
-    - docker push "$IMAGE_PREFIX/airflow:$CI_COMMIT_SHORT_SHA"
-    - docker push "$IMAGE_PREFIX/jupyter:$CI_COMMIT_SHORT_SHA"
-    - docker push "$IMAGE_PREFIX/backend:latest"
-    - docker push "$IMAGE_PREFIX/frontend:latest"
-    - docker push "$IMAGE_PREFIX/airflow:latest"
-    - docker push "$IMAGE_PREFIX/jupyter:latest"
+    - mkdir -p /kaniko/.docker
+    - >
+      printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}'
+      "$HARBOR_REGISTRY" "$HARBOR_USER" "$HARBOR_PASSWORD" > /kaniko/.docker/config.json
+    - /kaniko/executor --context "${CI_PROJECT_DIR}/apps/backend" --dockerfile "${CI_PROJECT_DIR}/apps/backend/Dockerfile" --destination "$IMAGE_PREFIX/backend:$CI_COMMIT_SHORT_SHA" --destination "$IMAGE_PREFIX/backend:latest"
+    - /kaniko/executor --context "${CI_PROJECT_DIR}/apps/frontend" --dockerfile "${CI_PROJECT_DIR}/apps/frontend/Dockerfile" --build-arg VITE_API_BASE_URL=http://localhost:30081 --destination "$IMAGE_PREFIX/frontend:$CI_COMMIT_SHORT_SHA" --destination "$IMAGE_PREFIX/frontend:latest"
+    - /kaniko/executor --context "${CI_PROJECT_DIR}/apps/airflow" --dockerfile "${CI_PROJECT_DIR}/apps/airflow/Dockerfile" --destination "$IMAGE_PREFIX/airflow:$CI_COMMIT_SHORT_SHA" --destination "$IMAGE_PREFIX/airflow:latest"
+    - /kaniko/executor --context "${CI_PROJECT_DIR}/apps/jupyter" --dockerfile "${CI_PROJECT_DIR}/apps/jupyter/Dockerfile" --destination "$IMAGE_PREFIX/jupyter:$CI_COMMIT_SHORT_SHA" --destination "$IMAGE_PREFIX/jupyter:latest"
 
 deploy_k8s:
   stage: deploy
   image: bitnami/kubectl:1.32
   needs:
-    - docker_build_and_push
+    - kaniko_build_and_push
   script:
     - echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
     - export KUBECONFIG="$CI_PROJECT_DIR/kubeconfig"
