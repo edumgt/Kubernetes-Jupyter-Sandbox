@@ -1,3 +1,11 @@
+지금 요구는 사용자별 Jupyter 세션 -> 작업 저장 -> Harbor 이미지화 -> 다음 로그인 시 그 사용자 이미지로 재기동 흐름으로 이해했습니다. 먼저 현재 per-user Jupyter 세션 로직과 Harbor 관련 설정을 다시 확인해서, 최소한의 추가로 snapshot/publish/restore 경로를 넣을 수 있게 구조를 잡겠습니다.
+
+이번 변경의 핵심은 두 가지입니다. per-user workspace를 PVC subPath로 지속시키고, 그 workspace를 Kaniko Job으로 Harbor 이미지로 올린 뒤, 다음 세션 생성 시 그 이미지를 우선 사용하도록 백엔드와 UI를 같이 확장하겠습니다.
+
+Jupyter 쪽은 공통 식별자와 workspace 경로가 여러 군데서 쓰이게 되어서, 먼저 username -> session id -> pod/service/workspace/image 규칙을 한 군데로 모으고 그 위에 snapshot 모듈을 얹겠습니다.
+
+
+
 전체 프로세스를 flowchart 및 sequence 로 readme 에 포함시켜줘
 Steer
 
