@@ -88,6 +88,18 @@ def get_snapshot_status_for_identity(settings: Settings, identity: LabIdentity) 
     except ConfigException as exc:
         raise RuntimeError("Kubernetes client configuration is unavailable.") from exc
     except ApiException as exc:
+        if exc.status == 403:
+            return {
+                "username": identity.username,
+                "session_id": identity.session_id,
+                "workspace_subpath": identity.workspace_subpath,
+                "image": image,
+                "status": "missing",
+                "job_name": None,
+                "published_at": None,
+                "restorable": False,
+                "detail": "Harbor snapshot lookup is not permitted in this environment, so the base Jupyter image will be used.",
+            }
         raise RuntimeError(f"Kubernetes API error while reading Harbor snapshot status: {exc.reason}") from exc
 
 

@@ -86,12 +86,12 @@ def _restore_workspace_script(settings: Settings, launch_image: str, workspace_s
     return f"""
 set -eu
 workspace_dir="/workspace-volume/{workspace_subpath}"
-mkdir -p "${workspace_dir}"
-if [ -z "$(find "${workspace_dir}" -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)" ] && [ -d "{settings.jupyter_bootstrap_dir}" ]; then
-  cp -a {settings.jupyter_bootstrap_dir}/. "${workspace_dir}"/ 2>/dev/null || true
+mkdir -p "${{workspace_dir}}"
+if [ -z "$(find "${{workspace_dir}}" -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)" ] && [ -d "{settings.jupyter_bootstrap_dir}" ]; then
+  cp -a {settings.jupyter_bootstrap_dir}/. "${{workspace_dir}}"/ 2>/dev/null || true
 fi
-mkdir -p "${workspace_dir}/.platform"
-printf '%s\\n' '{launch_image}' > "${workspace_dir}/.platform/launch-image"
+mkdir -p "${{workspace_dir}}/.platform"
+printf '%s\\n' '{launch_image}' > "${{workspace_dir}}/.platform/launch-image"
 """.strip()
 
 

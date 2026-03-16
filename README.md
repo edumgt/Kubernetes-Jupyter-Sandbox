@@ -227,6 +227,16 @@ kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
 
 Frontend 는 로그인 모드에 따라 사용자용 Jupyter sandbox 화면 또는 관리자용 monitoring/control-plane 화면을 보여주며, 세션 상태, snapshot 상태, 사용자별 pod 실행 여부와 사용 지표를 함께 노출합니다.
 
+### Demo Screenshots
+
+`test1@test.com` 사용자가 본인 sandbox JupyterLab에 접속해 `print("hello world")` 결과를 확인하는 화면:
+
+![test1 user Jupyter hello world](docs/screenshots/user-jupyter-hello-world.png)
+
+`admin@test.com` 관리자가 관리자 모드로 접속해 현재 실행 중인 사용자 수를 보는 monitoring 대시보드:
+
+![admin dashboard running users](docs/screenshots/admin-dashboard-running-users.png)
+
 ## 폐쇄망 / OVA 준비
 
 OVA provisioning 시 아래 항목을 미리 넣도록 구성했습니다.

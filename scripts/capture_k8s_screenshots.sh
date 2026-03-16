@@ -3,7 +3,25 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="${OUTPUT_DIR:-${ROOT_DIR}/docs/screenshots}"
+PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft/playwright:v1.53.0-jammy}"
 DRY_RUN=0
+ENV_VARS=(
+  CAPTURE_TARGETS
+  PLAYWRIGHT_IMAGE
+  FRONTEND_URL
+  BACKEND_URL
+  AIRFLOW_URL
+  JUPYTER_URL
+  GITLAB_URL
+  BROWSER_CDP_URL
+  ADMIN_USERNAME
+  ADMIN_PASSWORD
+  CONTROL_PLANE_USERNAME
+  CONTROL_PLANE_PASSWORD
+  TEST1_USERNAME
+  TEST1_PASSWORD
+  TEST1_LAB_URL
+)
 
 usage() {
   cat <<'EOF'
@@ -22,6 +40,15 @@ die() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+build_env_args() {
+  local item
+  for item in "${ENV_VARS[@]}"; do
+    if [[ -n "${!item:-}" ]]; then
+      DOCKER_ENV_ARGS+=(-e "${item}=${!item}")
+    fi
+  done
 }
 
 run_cmd() {
@@ -53,10 +80,19 @@ done
 
 require_command docker
 run_cmd mkdir -p "${OUTPUT_DIR}"
+if [[ "${OUTPUT_DIR}" == "${ROOT_DIR}"/* ]]; then
+  CONTAINER_OUTPUT_DIR="${CONTAINER_OUTPUT_DIR:-/workspace/${OUTPUT_DIR#${ROOT_DIR}/}}"
+else
+  CONTAINER_OUTPUT_DIR="${CONTAINER_OUTPUT_DIR:-/workspace/docs/screenshots}"
+fi
+DOCKER_ENV_ARGS=()
+build_env_args
 
 run_cmd docker run --rm \
   --network host \
   -v "${ROOT_DIR}:/workspace" \
   -w /workspace \
-  mcr.microsoft/playwright:v1.53.0-jammy \
-  node scripts/playwright/capture.mjs
+  -e "OUTPUT_DIR=${CONTAINER_OUTPUT_DIR}" \
+  "${DOCKER_ENV_ARGS[@]}" \
+  "${PLAYWRIGHT_IMAGE}" \
+  bash -lc 'if [[ ! -e /workspace/node_modules && -d /opt/playwright-runner/node_modules ]]; then ln -s /opt/playwright-runner/node_modules /workspace/node_modules; fi; node scripts/playwright/capture.mjs'

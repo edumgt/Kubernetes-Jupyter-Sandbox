@@ -14,6 +14,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi import HTTPException
+from kubernetes.client.exceptions import ApiException
 
 from app.config import get_settings
 from app.main import (
@@ -25,6 +26,8 @@ from app.main import (
 )
 from app.models import DemoUserLoginRequest, LabSessionRequest
 from app.services import demo_users
+from app.services.jupyter_sessions import _restore_workspace_script
+from app.services.jupyter_snapshots import get_snapshot_status
 
 
 def fake_session_summary(username: str, minutes_ago: int = 1) -> dict[str, object]:
@@ -124,6 +127,30 @@ class DemoAuthFlowTests(unittest.TestCase):
         self.assertGreaterEqual(users["test2@test.com"].current_session_seconds, 1)
         self.assertTrue(users["test1@test.com"].ready)
         self.assertTrue(users["test2@test.com"].ready)
+
+    def test_snapshot_status_falls_back_when_job_listing_is_forbidden(self) -> None:
+        settings = get_settings()
+        with patch(
+            "app.services.jupyter_snapshots.get_batch_v1_api",
+            side_effect=ApiException(status=403, reason="Forbidden"),
+        ):
+            snapshot = get_snapshot_status(settings, "test1@test.com")
+
+        self.assertEqual(snapshot["status"], "missing")
+        self.assertFalse(snapshot["restorable"])
+        self.assertIn("base Jupyter image", snapshot["detail"])
+
+    def test_restore_workspace_script_keeps_shell_variables_intact(self) -> None:
+        settings = get_settings()
+        script = _restore_workspace_script(
+            settings,
+            "docker.io/edumgt/k8s-data-platform-jupyter:latest",
+            "users/test1-test-com",
+        )
+
+        self.assertIn('workspace_dir="/workspace-volume/users/test1-test-com"', script)
+        self.assertIn('${workspace_dir}', script)
+        self.assertNotIn("NameError", script)
 
 
 if __name__ == "__main__":
