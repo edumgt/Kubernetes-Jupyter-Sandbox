@@ -4,7 +4,8 @@
 
 ```bash
 systemctl status docker
-systemctl status k3s
+systemctl status containerd
+systemctl status kubelet
 docker ps
 ```
 
@@ -61,7 +62,8 @@ curl -sS http://localhost:30081/api/jupyter/snapshots \
 
 ```bash
 sudo systemctl restart docker
-sudo systemctl restart k3s
+sudo systemctl restart containerd
+sudo systemctl restart kubelet
 kubectl rollout restart deployment/backend -n data-platform-dev
 kubectl rollout restart deployment/frontend -n data-platform-dev
 kubectl rollout restart deployment/jupyter -n data-platform-dev
@@ -82,8 +84,15 @@ kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
 bash scripts/prepare_offline_bundle.sh --out-dir dist/offline-bundle
 ```
 
+오프라인 번들에서 이미지 import 와 Kubernetes 적용까지 함께 진행하려면:
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir dist/offline-bundle --apply --env dev
+```
+
 OVA 내부 기본 경로:
 
 ```bash
 ls -lah /opt/k8s-data-platform/offline-bundle
+ls -lah /opt/k8s-data-platform/offline-bundle/k8s
 ```

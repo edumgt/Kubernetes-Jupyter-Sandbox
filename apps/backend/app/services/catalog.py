@@ -5,7 +5,7 @@ def runtime_profile(settings: Settings) -> dict[str, str]:
     return {
         "environment": settings.env,
         "host_os": "Ubuntu 24",
-        "cluster": "k3s single-node",
+        "cluster": "Kubernetes single-node control plane",
         "containers": "OCI images on Kubernetes",
         "backend": "Python 3.12 / FastAPI",
         "frontend": "Node 22.22 / Quasar Vue 3",
@@ -66,6 +66,11 @@ def quick_links(settings: Settings) -> list[dict[str, str]]:
             "name": "Control Plane",
             "url": settings.control_plane_url,
             "description": "Frontend module for cluster admin login, node list, and pod inventory.",
+        },
+        {
+            "name": "Sandbox Admin",
+            "url": settings.admin_url,
+            "description": "Admin monitoring for demo user Jupyter sandbox usage, launch counts, and active sessions.",
         },
         {
             "name": "Airflow",

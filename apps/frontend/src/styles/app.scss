@@ -178,6 +178,41 @@ body {
   margin-top: 18px;
 }
 
+.auth-card,
+.inventory-card {
+  overflow: hidden;
+}
+
+.auth-session-bar {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.demo-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.demo-user-card {
+  border-radius: 20px;
+  background: rgba(247, 250, 252, 0.9);
+  border: 1px solid rgba(18, 34, 47, 0.08);
+}
+
+.demo-title {
+  font-size: 1rem;
+}
+
+.demo-fill-button {
+  margin-top: 14px;
+}
+
 .inventory-card {
   overflow: hidden;
 }

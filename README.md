@@ -1,6 +1,6 @@
 # k8s-data-platform-ova
 
-이 저장소는 `Ubuntu 24 OVA -> k3s single-node Kubernetes -> platform workloads` 구조를 기준으로 만든 실습/운영용 플랫폼입니다. 현재 실행 기준은 Docker Compose 가 아니라 `Kubernetes manifest + kustomize overlay + k3s` 이며, OVA 안에 Docker Engine, k3s, vim, curl, Node.js, Python, 이미지 캐시, 오프라인 번들까지 미리 넣는 방향으로 정리했습니다.
+이 저장소는 `Ubuntu 24 OVA -> kubeadm single-node Kubernetes -> platform workloads` 구조를 기준으로 만든 실습/운영용 플랫폼입니다. 현재 실행 기준은 Docker Compose 가 아니라 `Kubernetes manifest + kustomize overlay + kubeadm/bootstrap` 이며, OVA 안에 Docker Engine, containerd, kubeadm, kubelet, kubectl, vim, curl, Node.js, Python, 이미지 캐시, 오프라인 번들까지 미리 넣는 방향으로 정리했습니다.
 
 핵심 요구 반영 사항은 아래와 같습니다.
 
@@ -16,7 +16,7 @@
 현재 구조는 Kubernetes 가 맞습니다.
 
 - 호스트 런타임: `Ubuntu 24`
-- 클러스터: `k3s` single-node
+- 클러스터: `kubeadm` 기반 single-node Kubernetes
 - 배포 기준: `infra/k8s/base` + `infra/k8s/overlays/dev|prod`
 - 워크로드: `backend`, `frontend`, `mongodb`, `redis`, `airflow`, `jupyter`, `gitlab`, `gitlab-runner`
 - 사용자 Jupyter 세션: backend 가 Kubernetes API 로 per-user Pod/Service 생성
@@ -32,7 +32,7 @@
 │   ├── backend/          # FastAPI API + k8s session/snapshot control
 │   ├── frontend/         # Quasar(Vue 3) dashboard
 │   └── jupyter/          # JupyterLab image + bootstrap workspace
-├── ansible/              # OVA guest provisioning, Docker/k3s/bootstrap
+├── ansible/              # OVA guest provisioning, Docker/Kubernetes/bootstrap
 ├── infra/
 │   ├── harbor/           # Harbor snapshot integration notes
 │   └── k8s/              # base manifests + dev/prod overlays + runner overlay
@@ -47,8 +47,8 @@ flowchart TD
   A[WSL or build host] --> B[Packer]
   B --> C[Ubuntu 24 OVA]
   C --> D[Ansible provisioning]
-  D --> E[Docker Engine + k3s + tools]
-  E --> F[Kubernetes single-node cluster]
+  D --> E[Docker Engine + containerd + kubeadm/kubelet/kubectl]
+  E --> F[Kubernetes single-node control plane]
 
   F --> G[frontend NodePort 30080]
   F --> H[backend NodePort 30081]
@@ -108,7 +108,7 @@ sequenceDiagram
 
 ## 사용자별 세션 규칙
 
-공통 식별자 규칙은 [apps/backend/app/services/lab_identity.py](/home/Kubernetes-OVA-SRE-Archi/apps/backend/app/services/lab_identity.py) 에 모았습니다.
+공통 식별자 규칙은 [apps/backend/app/services/lab_identity.py](apps/backend/app/services/lab_identity.py) 에 모았습니다.
 
 - `username` 정규화
 - `session_id` 생성
@@ -119,9 +119,9 @@ sequenceDiagram
 
 이 규칙을 바탕으로:
 
-- [apps/backend/app/services/jupyter_sessions.py](/home/Kubernetes-OVA-SRE-Archi/apps/backend/app/services/jupyter_sessions.py)
+- [apps/backend/app/services/jupyter_sessions.py](apps/backend/app/services/jupyter_sessions.py)
   가 Pod/Service/PVC mount 를 관리하고,
-- [apps/backend/app/services/jupyter_snapshots.py](/home/Kubernetes-OVA-SRE-Archi/apps/backend/app/services/jupyter_snapshots.py)
+- [apps/backend/app/services/jupyter_snapshots.py](apps/backend/app/services/jupyter_snapshots.py)
   가 Kaniko snapshot publish/status/restore image 선택을 담당합니다.
 
 ## 이미지 전략
@@ -165,7 +165,7 @@ OVA export 까지 한 번에 진행하려면:
 bash scripts/run_wsl.sh
 ```
 
-### 3. Docker Hub mirror + local k3s import
+### 3. Docker Hub mirror + local Kubernetes runtime import
 
 로컬 Docker login 상태를 사용해서 `edumgt` 네임스페이스 기준으로 support/app 이미지를 정리합니다.
 
@@ -208,22 +208,34 @@ kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
 
 ## Frontend / API
 
-- Frontend 에서 username 입력 후 `Start Lab`
+- Frontend 로그인 계정
+  - user: `test1@test.com / 123456`
+  - user: `test2@test.com / 123456`
+  - admin: `admin@test.com / 123456`
+- 일반 사용자는 로그인 후 본인 전용 Jupyter sandbox 만 시작/중지/복원
+- 관리자는 관리자 모드에서 사용자별 sandbox 실행 여부, 현재 사용시간, 누적 사용시간, 로그인 회수, 실행 회수를 모니터링
 - Backend API:
+  - `POST /api/auth/login`
+  - `GET /api/auth/me`
+  - `POST /api/auth/logout`
   - `POST /api/jupyter/sessions`
   - `GET /api/jupyter/sessions/{username}`
   - `DELETE /api/jupyter/sessions/{username}`
   - `GET /api/jupyter/snapshots/{username}`
   - `POST /api/jupyter/snapshots`
+  - `GET /api/admin/sandboxes`
 
-Frontend 는 세션 상태와 snapshot 상태를 분리해서 보여주며, 현재 launch image 와 workspace subPath 도 같이 노출합니다.
+Frontend 는 로그인 모드에 따라 사용자용 Jupyter sandbox 화면 또는 관리자용 monitoring/control-plane 화면을 보여주며, 세션 상태, snapshot 상태, 사용자별 pod 실행 여부와 사용 지표를 함께 노출합니다.
 
 ## 폐쇄망 / OVA 준비
 
 OVA provisioning 시 아래 항목을 미리 넣도록 구성했습니다.
 
 - Docker Engine
-- k3s
+- containerd
+- kubeadm
+- kubelet
+- kubectl
 - Python 3.12 tooling
 - Node.js 22
 - vim, curl, git, jq, rsync, zip, unzip, wget
@@ -240,16 +252,23 @@ bash scripts/prepare_offline_bundle.sh --out-dir dist/offline-bundle
 
 번들 내용:
 
-- `images/`: Docker/Kubernetes import 용 tar archives
+- `images/`: Docker load / Kubernetes container runtime import 용 tar archives
 - `wheels/`: backend/jupyter/airflow Python wheel cache
 - `npm-cache/`: frontend npm cache
 - `frontend-package-lock.json`: frontend offline rebuild 기준 lockfile
+- `k8s/`: offline apply/import 용 manifests, helper scripts, 운영 문서
+
+오프라인 번들로 이미지 import 와 k8s 적용까지 진행하려면:
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir dist/offline-bundle --apply --env dev
+```
 
 ## GitHub Actions
 
 변경된 컨테이너 자산을 Docker Hub 로 보내는 workflow 를 추가했습니다.
 
-- workflow: [.github/workflows/publish-images.yml](/home/Kubernetes-OVA-SRE-Archi/.github/workflows/publish-images.yml)
+- workflow: [.github/workflows/publish-images.yml](.github/workflows/publish-images.yml)
 - required secrets:
   - `DOCKERHUB_USERNAME`
   - `DOCKERHUB_TOKEN`
@@ -286,13 +305,14 @@ bash scripts/install_git_hooks.sh
 
 ## 주요 파일
 
-- OVA template: [packer/k8s-data-platform.pkr.hcl](/home/Kubernetes-OVA-SRE-Archi/packer/k8s-data-platform.pkr.hcl)
-- Ansible playbook: [ansible/playbook.yml](/home/Kubernetes-OVA-SRE-Archi/ansible/playbook.yml)
-- Docker runtime role: [ansible/roles/container_runtime/tasks/main.yml](/home/Kubernetes-OVA-SRE-Archi/ansible/roles/container_runtime/tasks/main.yml)
-- Platform bootstrap: [ansible/roles/platform_bootstrap/tasks/main.yml](/home/Kubernetes-OVA-SRE-Archi/ansible/roles/platform_bootstrap/tasks/main.yml)
-- Base k8s manifests: [infra/k8s/base/kustomization.yaml](/home/Kubernetes-OVA-SRE-Archi/infra/k8s/base/kustomization.yaml)
-- Session controller: [apps/backend/app/services/jupyter_sessions.py](/home/Kubernetes-OVA-SRE-Archi/apps/backend/app/services/jupyter_sessions.py)
-- Snapshot controller: [apps/backend/app/services/jupyter_snapshots.py](/home/Kubernetes-OVA-SRE-Archi/apps/backend/app/services/jupyter_snapshots.py)
-- Frontend dashboard: [apps/frontend/src/App.vue](/home/Kubernetes-OVA-SRE-Archi/apps/frontend/src/App.vue)
-- Local build/publish: [scripts/build_k8s_images.sh](/home/Kubernetes-OVA-SRE-Archi/scripts/build_k8s_images.sh)
-- Offline bundle: [scripts/prepare_offline_bundle.sh](/home/Kubernetes-OVA-SRE-Archi/scripts/prepare_offline_bundle.sh)
+- OVA template: [packer/k8s-data-platform.pkr.hcl](packer/k8s-data-platform.pkr.hcl)
+- Ansible playbook: [ansible/playbook.yml](ansible/playbook.yml)
+- Docker runtime role: [ansible/roles/container_runtime/tasks/main.yml](ansible/roles/container_runtime/tasks/main.yml)
+- Platform bootstrap: [ansible/roles/platform_bootstrap/tasks/main.yml](ansible/roles/platform_bootstrap/tasks/main.yml)
+- Base k8s manifests: [infra/k8s/base/kustomization.yaml](infra/k8s/base/kustomization.yaml)
+- Session controller: [apps/backend/app/services/jupyter_sessions.py](apps/backend/app/services/jupyter_sessions.py)
+- Snapshot controller: [apps/backend/app/services/jupyter_snapshots.py](apps/backend/app/services/jupyter_snapshots.py)
+- Frontend dashboard: [apps/frontend/src/App.vue](apps/frontend/src/App.vue)
+- Local build/publish: [scripts/build_k8s_images.sh](scripts/build_k8s_images.sh)
+- Offline bundle: [scripts/prepare_offline_bundle.sh](scripts/prepare_offline_bundle.sh)
+- Offline import/apply: [scripts/import_offline_bundle.sh](scripts/import_offline_bundle.sh)

@@ -21,11 +21,17 @@
     port: '22'
     proto: tcp
 
-- name: Allow k3s API
+- name: Allow Kubernetes API
   community.general.ufw:
     rule: allow
     port: '6443'
     proto: tcp
+
+- name: Allow Flannel VXLAN
+  community.general.ufw:
+    rule: allow
+    port: '8472'
+    proto: udp
 
 - name: Allow frontend NodePort
   community.general.ufw:

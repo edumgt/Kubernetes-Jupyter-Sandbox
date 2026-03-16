@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:30081/docs"
     frontend_url: str = "http://localhost:30080"
     control_plane_url: str = "http://localhost:30080/#control-plane"
+    admin_url: str = "http://localhost:30080/#sandbox-admin"
     airflow_url: str = "http://localhost:30090"
     jupyter_url: str = "http://localhost:30088/lab"
     gitlab_url: str = "http://localhost:30089"
@@ -29,8 +30,8 @@ class Settings(BaseSettings):
     jupyter_bootstrap_dir: str = "/opt/platform/bootstrap-workspace"
     jupyter_snapshot_builder_image: str = "docker.io/edumgt/platform-kaniko-executor:v1.23.2-debug"
     jupyter_token: str = Field(default="platform123", validation_alias="JUPYTER_TOKEN")
-    control_plane_username: str = "platform-admin"
-    control_plane_password: str = "controlplane123!"
+    control_plane_username: str = "admin@test.com"
+    control_plane_password: str = "123456"
     control_plane_session_secret: str = "controlplane-session"
     teradata_host: str | None = None
     teradata_user: str | None = None

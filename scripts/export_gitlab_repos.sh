@@ -256,7 +256,7 @@ write_repo_readme() {
 ## CI/CD 흐름
 
 - GitLab Runner 가 pipeline 을 실행
-- Kaniko 로 Docker Hub `edumgt/*` 이미지 빌드/푸시
+- Kaniko 로 Docker Hub \`edumgt/*\` 이미지 빌드/푸시
 - \`kubectl set image\` 로 Kubernetes deployment \`${deployment_name}\` 갱신
 
 ## 필요한 GitLab CI 변수

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/kubernetes_runtime.sh
+source "${SCRIPT_DIR}/lib/kubernetes_runtime.sh"
+
 ENVIRONMENT="dev"
 
 while [[ $# -gt 0 ]]; do
@@ -27,17 +31,17 @@ esac
 
 NAMESPACE="data-platform-${ENVIRONMENT}"
 
-echo '[1] k3s service'
-systemctl --no-pager --full status k3s | sed -n '1,60p'
+echo '[1] Kubernetes services'
+show_kubernetes_service_status
 
 echo '[2] Cluster nodes'
-kubectl get nodes || sudo k3s kubectl get nodes
+run_kubectl get nodes
 
 echo '[3] Platform pods'
-kubectl get pods -n "${NAMESPACE}" || sudo k3s kubectl get pods -n "${NAMESPACE}"
+run_kubectl get pods -n "${NAMESPACE}"
 
 echo '[4] Services'
-kubectl get svc -n "${NAMESPACE}" || sudo k3s kubectl get svc -n "${NAMESPACE}"
+run_kubectl get svc -n "${NAMESPACE}"
 
 echo '[5] Persistent volumes'
-kubectl get pvc -n "${NAMESPACE}" || sudo k3s kubectl get pvc -n "${NAMESPACE}"
+run_kubectl get pvc -n "${NAMESPACE}"

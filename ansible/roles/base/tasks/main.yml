@@ -35,6 +35,18 @@
     dest: /usr/local/bin/healthcheck.sh
     mode: '0755'
 
+- name: Ensure local healthcheck library directory exists
+  file:
+    path: /usr/local/bin/lib
+    state: directory
+    mode: '0755'
+
+- name: Copy Kubernetes runtime helper library
+  copy:
+    src: ../../../scripts/lib/kubernetes_runtime.sh
+    dest: /usr/local/bin/lib/kubernetes_runtime.sh
+    mode: '0644'
+
 - name: Configure unattended upgrades
   copy:
     dest: /etc/apt/apt.conf.d/20auto-upgrades

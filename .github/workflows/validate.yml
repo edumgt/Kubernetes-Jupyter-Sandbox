@@ -20,6 +20,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible ansible-lint
 
+      - name: Install backend test dependencies
+        run: |
+          pip install \
+            "fastapi>=0.115,<1.0" \
+            "pydantic-settings>=2.7,<3.0" \
+            "kubernetes>=31.0,<33.0" \
+            "pymongo>=4.10,<5.0" \
+            "redis>=5.2,<6.0" \
+            "httpx>=0.27,<1.0"
+
       - name: Ansible lint
         run: ansible-lint ansible/playbook.yml || true
 
@@ -30,12 +40,15 @@ jobs:
           bash -n scripts/apply_k8s.sh
           bash -n scripts/reset_k8s.sh
           bash -n scripts/status_k8s.sh
+          bash -n scripts/lib/kubernetes_runtime.sh
           bash -n scripts/healthcheck.sh
           bash -n scripts/verify.sh
           bash -n scripts/publish_dockerhub.sh
           bash -n scripts/prepare_offline_bundle.sh
+          bash -n scripts/import_offline_bundle.sh
           bash -n scripts/export_gitlab_repos.sh
           bash -n tests/test_gitlab_repo_export.sh
+          bash -n tests/test_prepare_offline_bundle.sh
           bash -n tests/test_wsl_scripts.sh
 
       - name: Python compile
@@ -54,3 +67,5 @@ jobs:
         run: |
           bash tests/test_wsl_scripts.sh
           bash tests/test_gitlab_repo_export.sh
+          bash tests/test_prepare_offline_bundle.sh
+          python3 tests/test_demo_auth_flow.py

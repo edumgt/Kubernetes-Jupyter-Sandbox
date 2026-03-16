@@ -7,8 +7,8 @@ Runner 는 `platform-backend`, `platform-frontend`, `platform-airflow`, `platfor
 
 1. dev 또는 prod 환경에 맞는 예시 secret 파일을 선택합니다.
 
-- dev: [secret.example.yaml](/home/Kubernetes-OVA-SRE-Archi/infra/k8s/runner/base/secret.example.yaml#L1) 내용을 기준으로 [secret.example-patch.yaml](/home/Kubernetes-OVA-SRE-Archi/infra/k8s/runner/overlays/dev/secret.example-patch.yaml#L1) 의 `token` 값을 변경
-- prod: [secret.example.yaml](/home/Kubernetes-OVA-SRE-Archi/infra/k8s/runner/base/secret.example.yaml#L1) 내용을 기준으로 [secret.example-patch.yaml](/home/Kubernetes-OVA-SRE-Archi/infra/k8s/runner/overlays/prod/secret.example-patch.yaml#L1) 의 `token` 값을 변경
+- dev: [secret.example.yaml](base/secret.example.yaml) 내용을 기준으로 [secret.example-patch.yaml](overlays/dev/secret.example-patch.yaml) 의 `token` 값을 변경
+- prod: [secret.example.yaml](base/secret.example.yaml) 내용을 기준으로 [secret.example-patch.yaml](overlays/prod/secret.example-patch.yaml) 의 `token` 값을 변경
 
 2. 다음 명령으로 오버레이를 적용합니다.
 
@@ -22,4 +22,4 @@ kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
 - 기본 `replicas` 는 `0` 입니다.
 - 토큰 반영 전에는 scale 하지 않는 것을 권장합니다.
 - Runner overlay 는 `data-platform-dev` 또는 `data-platform-prod` namespace에 맞춰 따로 적용합니다.
-- app repo split 흐름은 [gitlab-repo-layout.md](/home/Kubernetes-OVA-SRE-Archi/docs/gitlab-repo-layout.md#L1) 를 참고하면 됩니다.
+- app repo split 흐름은 [gitlab-repo-layout.md](../../../docs/gitlab-repo-layout.md) 를 참고하면 됩니다.

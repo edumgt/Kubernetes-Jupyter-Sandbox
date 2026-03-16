@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/kubernetes_runtime.sh
+source "${SCRIPT_DIR}/lib/kubernetes_runtime.sh"
+
 ENVIRONMENT="dev"
 
 while [[ $# -gt 0 ]]; do
@@ -27,7 +31,7 @@ esac
 
 NAMESPACE="data-platform-${ENVIRONMENT}"
 
-systemctl is-active --quiet k3s
-kubectl get nodes >/dev/null 2>&1 || sudo k3s kubectl get nodes >/dev/null
-kubectl get pods -n "${NAMESPACE}" >/dev/null 2>&1 || sudo k3s kubectl get pods -n "${NAMESPACE}" >/dev/null
+kubernetes_services_ready
+run_kubectl get nodes >/dev/null
+run_kubectl get pods -n "${NAMESPACE}" >/dev/null
 exit 0

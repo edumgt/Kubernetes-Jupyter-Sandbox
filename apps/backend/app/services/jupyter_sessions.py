@@ -7,6 +7,7 @@ from kubernetes.client.exceptions import ApiException
 from kubernetes.config.config_exception import ConfigException
 
 from app.config import Settings
+from app.services.demo_users import record_lab_launch, record_lab_stop, sync_session_activity
 from app.services.jupyter_snapshots import resolve_launch_image_for_identity
 from app.services.kube_client import get_core_v1_api
 from app.services.lab_identity import LabIdentity, build_lab_identity
@@ -263,7 +264,9 @@ def get_lab_session(settings: Settings, username: str) -> dict[str, object]:
         launch_image = _pod_image(pod)
         if launch_image is None:
             launch_image, _snapshot = resolve_launch_image_for_identity(settings, identity)
-        return _session_summary(settings, identity, pod, service, launch_image)
+        summary = _session_summary(settings, identity, pod, service, launch_image)
+        sync_session_activity(settings, identity.username, summary)
+        return summary
     except ConfigException as exc:
         raise RuntimeError("Kubernetes client configuration is unavailable.") from exc
     except ApiException as exc:
@@ -272,6 +275,7 @@ def get_lab_session(settings: Settings, username: str) -> dict[str, object]:
 
 def ensure_lab_session(settings: Settings, username: str) -> dict[str, object]:
     identity = build_lab_identity(username)
+    created_new_session = False
 
     try:
         api = get_core_v1_api()
@@ -283,6 +287,7 @@ def ensure_lab_session(settings: Settings, username: str) -> dict[str, object]:
 
         if pod is None:
             _create_pod(api, settings, identity, launch_image)
+            created_new_session = True
 
         service = _read_service(api, settings.k8s_namespace, identity.service_name)
         if service is None:
@@ -290,7 +295,12 @@ def ensure_lab_session(settings: Settings, username: str) -> dict[str, object]:
 
         pod = _read_pod(api, settings.k8s_namespace, identity.pod_name)
         service = _read_service(api, settings.k8s_namespace, identity.service_name)
-        return _session_summary(settings, identity, pod, service, launch_image)
+        summary = _session_summary(settings, identity, pod, service, launch_image)
+        if created_new_session:
+            record_lab_launch(settings, identity.username, summary.get("created_at"))
+        else:
+            sync_session_activity(settings, identity.username, summary)
+        return summary
     except ConfigException as exc:
         raise RuntimeError("Kubernetes client configuration is unavailable.") from exc
     except ApiException as exc:
@@ -321,6 +331,7 @@ def delete_lab_session(settings: Settings, username: str) -> dict[str, object]:
         summary["ready"] = False
         summary["detail"] = "Personal JupyterLab session resources were deleted."
         summary["node_port"] = None
+        record_lab_stop(settings, identity.username)
         return summary
     except ConfigException as exc:
         raise RuntimeError("Kubernetes client configuration is unavailable.") from exc

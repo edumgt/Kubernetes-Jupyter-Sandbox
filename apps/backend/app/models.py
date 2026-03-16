@@ -77,6 +77,62 @@ class SnapshotStatusResponse(BaseModel):
     detail: str
 
 
+class DemoUserInfo(BaseModel):
+    username: str
+    role: str
+    display_name: str
+
+
+class DemoUserLoginRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class DemoUserLoginResponse(BaseModel):
+    token: str
+    user: DemoUserInfo
+
+
+class DemoUserSessionResponse(BaseModel):
+    user: DemoUserInfo
+
+
+class AdminSandboxSummary(BaseModel):
+    sandbox_user_count: int
+    running_user_count: int
+    ready_user_count: int
+    total_login_count: int
+    total_launch_count: int
+    total_session_seconds: int
+
+
+class AdminSandboxUserRow(BaseModel):
+    username: str
+    display_name: str
+    status: str
+    ready: bool
+    detail: str
+    pod_name: str
+    service_name: str
+    workspace_subpath: str
+    image: str
+    node_port: int | None = None
+    session_id: str
+    phase: str
+    login_count: int
+    launch_count: int
+    current_session_seconds: int
+    total_session_seconds: int
+    last_login_at: str | None = None
+    last_launch_at: str | None = None
+    last_stop_at: str | None = None
+
+
+class AdminSandboxOverviewResponse(BaseModel):
+    summary: AdminSandboxSummary
+    users: list[AdminSandboxUserRow]
+
+
 class ControlPlaneLoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)

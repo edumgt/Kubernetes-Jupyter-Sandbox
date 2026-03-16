@@ -7,5 +7,5 @@
     - security
     - toolchains
     - container_runtime
-    - k3s
+    - kubernetes
     - platform_bootstrap

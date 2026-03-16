@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=scripts/lib/kubernetes_runtime.sh
+source "${SCRIPT_DIR}/lib/kubernetes_runtime.sh"
 TMP_DIR="${TMP_DIR:-${ROOT_DIR}/.tmp-k8s-images}"
 DRY_RUN=0
 PUSH_IMAGES=0
-LOAD_K3S=1
+LOAD_RUNTIME=1
 INCLUDE_SUPPORT_IMAGES=1
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-edumgt}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
@@ -18,7 +21,7 @@ Options:
   --namespace <name>      Docker Hub namespace. Defaults to edumgt.
   --tag <tag>             Tag to apply to platform app images. Defaults to latest.
   --push                  Push mirrored support images and built app images with the current docker login.
-  --skip-k3s-import       Skip importing the saved archives into the local k3s containerd cache.
+  --skip-runtime-import   Skip importing the saved archives into the local Kubernetes container runtime cache.
   --skip-support-images   Skip mirroring the upstream base/runtime/CI images into the namespace.
   --dry-run               Print commands without executing them.
   -h, --help              Show this help.
@@ -45,19 +48,19 @@ run_cmd() {
   "$@"
 }
 
-import_to_k3s() {
+import_to_runtime() {
   local archive="$1"
 
-  if [[ "${LOAD_K3S}" != "1" ]]; then
+  if [[ "${LOAD_RUNTIME}" != "1" ]]; then
     return 0
   fi
 
-  if command -v sudo >/dev/null 2>&1; then
-    run_cmd sudo k3s ctr images import "${archive}"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    print_runtime_import_cmd "${archive}"
     return 0
   fi
 
-  run_cmd k3s ctr images import "${archive}"
+  import_archive_into_runtime "${archive}"
 }
 
 sanitize_archive_name() {
@@ -69,7 +72,7 @@ save_image_archive() {
   local archive="${TMP_DIR}/$(sanitize_archive_name "${image}").tar"
 
   run_cmd docker save -o "${archive}" "${image}"
-  import_to_k3s "${archive}"
+  import_to_runtime "${archive}"
 }
 
 mirror_support_image() {
@@ -119,8 +122,8 @@ while [[ $# -gt 0 ]]; do
       PUSH_IMAGES=1
       shift
       ;;
-    --skip-k3s-import)
-      LOAD_K3S=0
+    --skip-runtime-import)
+      LOAD_RUNTIME=0
       shift
       ;;
     --skip-support-images)
@@ -142,8 +145,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_command docker
-if [[ "${LOAD_K3S}" == "1" ]]; then
-  require_command k3s
+if [[ "${LOAD_RUNTIME}" == "1" ]]; then
+  require_runtime_importer
 fi
 
 run_cmd mkdir -p "${TMP_DIR}"

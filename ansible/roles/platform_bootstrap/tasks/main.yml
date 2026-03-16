@@ -34,7 +34,7 @@
     dest: /opt/k8s-data-platform/README.md
     mode: '0644'
 
-- name: Preload platform images into Docker and k3s
+- name: Preload platform images into Docker and Kubernetes runtime
   command:
     argv:
       - bash
@@ -63,7 +63,16 @@
       - --skip-images
   args:
     chdir: /opt/k8s-data-platform
-    creates: /opt/k8s-data-platform/offline-bundle/frontend-package-lock.json
+    creates: /opt/k8s-data-platform/offline-bundle/k8s/README.offline.md
+
+- name: Install platform offline bundle import helper
+  copy:
+    dest: /usr/local/bin/platform-import-bundle.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      bash /opt/k8s-data-platform/scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle "$@"
 
 - name: Install platform apply helper
   copy:
@@ -132,5 +141,6 @@
       kubectl get pods -n data-platform-dev
       kubectl get svc -n data-platform-dev
       kubectl get pvc -n data-platform-dev
+      platform-import-bundle.sh --apply --env dev
       bash /opt/k8s-data-platform/scripts/publish_dockerhub.sh --namespace edumgt --tag latest
       bash /opt/k8s-data-platform/scripts/prepare_offline_bundle.sh --out-dir /opt/k8s-data-platform/offline-bundle --skip-images

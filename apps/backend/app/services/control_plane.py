@@ -126,7 +126,7 @@ def build_control_plane_dashboard(settings: Settings, namespace: str = "all") ->
 
         return {
             "summary": {
-                "cluster_name": "k3s control plane",
+                "cluster_name": "Kubernetes control plane",
                 "cluster_version": cluster_version,
                 "current_namespace": namespace,
                 "namespace_count": len(namespaces),
