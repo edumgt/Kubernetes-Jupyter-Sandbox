@@ -1,0 +1,13 @@
+iso_url                   = "file:///mnt/c/isos/ubuntu-24.04.2-live-server-amd64.iso"
+iso_checksum              = "sha256:REPLACE_ME"
+vm_name                   = "k8s-data-platform"
+cpus                      = 4
+memory                    = 8192
+disk_size                 = 51200
+ssh_username              = "ubuntu"
+ssh_password              = "ubuntu"
+vmware_workstation_path   = "/mnt/c/Program Files (x86)/VMware/VMware Workstation"
+ovftool_path_windows      = "/mnt/c/Program Files/VMware/VMware OVF Tool/ovftool.exe"
+output_directory          = "output-k8s-data-platform"
+http_directory            = "http"
+headless                  = true
