@@ -22,7 +22,7 @@ variable "output_directory" { type = string }
 variable "http_directory" { type = string }
 variable "headless" { type = bool }
 
-source "vmware-iso" "k8s_data_platform" {
+source "virtualbox-iso" "k8s_data_platform" {
   vm_name          = var.vm_name
   guest_os_type    = "ubuntu-64"
   cpus             = var.cpus
@@ -57,7 +57,7 @@ source "vmware-iso" "k8s_data_platform" {
 }
 
 build {
-  sources = ["source.vmware-iso.k8s_data_platform"]
+  sources = ["source.virtualbox-iso.k8s_data_platform"]
 
   provisioner "shell" {
     inline = [
