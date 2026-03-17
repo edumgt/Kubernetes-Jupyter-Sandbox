@@ -1,8 +1,8 @@
 iso_url                   = "file:///C:/Users/HKIT/Downloads/ubuntu-24.04.4-live-server-amd64.iso"
 iso_checksum              = "sha256:e907d92eeec9df64163a7e454cbc8d7755e8ddc7ed42f99dbc80c40f1a138433"
 vm_name                   = "k8s-data-platform"
-cpus                      = 4
-memory                    = 8192
+cpus                      = 2
+memory                    = 4096
 disk_size                 = 51200
 ssh_username              = "ubuntu"
 ssh_password              = "ubuntu"
@@ -10,4 +10,4 @@ vmware_workstation_path   = "/mnt/c/Program Files (x86)/VMware/VMware Workstatio
 ovftool_path_windows      = "/mnt/c/Program Files/VMware/VMware OVF Tool/ovftool.exe"
 output_directory          = "output-k8s-data-platform"
 http_directory            = "http"
-headless                  = true
+headless                  = false
