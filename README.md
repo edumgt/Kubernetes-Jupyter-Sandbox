@@ -2,6 +2,13 @@
 
 이 저장소는 `Ubuntu 24 OVA -> kubeadm single-node Kubernetes -> platform workloads` 구조를 기준으로 만든 실습/운영용 플랫폼입니다. 현재 실행 기준은 Docker Compose 가 아니라 `Kubernetes manifest + kustomize overlay + kubeadm/bootstrap` 이며, OVA 안에 Docker Engine, containerd, kubeadm, kubelet, kubectl, vim, curl, Node.js, Python, 이미지 캐시, 오프라인 번들까지 미리 넣는 방향으로 정리했습니다.
 
+추가로, 이 README는 기존 Kubernetes 중심 설명 위에 다음 운영 관점을 더 잘 보이도록 보강했습니다.
+
+- OVA import 후 VirtualBox / VMware 에서 바로 테스트 가능한 흐름
+- 폐쇄망 환경에서의 서비스 접근 방식
+- Frontend 개발 환경(`code-server`, `Vite`, `npm offline`) 사용 절차
+- 오프라인 번들 import / 검증 체크리스트
+
 핵심 요구 반영 사항은 아래와 같습니다.
 
 - 사용자별 JupyterLab 세션을 Kubernetes Pod/Service 로 생성
@@ -57,6 +64,9 @@ flowchart TD
   F --> J["GitLab (NodePort 30089)"]
   F --> K["Airflow (NodePort 30090, Optional)"]
   F --> T["Nexus (NodePort 30091)"]
+  F --> U["Harbor (NodePort 30092)"]
+  F --> V["code-server (NodePort 30100)"]
+  F --> W["Vite Dev Server (NodePort 31080)"]
   F --> L["MongoDB + Redis + PVC"]
 
   %% Jupyter workflow
@@ -70,6 +80,11 @@ flowchart TD
   %% External sources
   R["docker.io/edumgt Images"] --> F
   S["Offline Bundle (/opt/k8s-data-platform)"] --> F
+
+  %% FE dev
+  V --> X["Frontend Source (/opt/k8s-data-platform/apps/frontend)"]
+  X --> W
+  T --> X
 ```
 
 ## Jupyter Snapshot Sequence
@@ -120,7 +135,7 @@ sequenceDiagram
 
 ## 사용자별 세션 규칙
 
-공통 식별자 규칙은 [apps/backend/app/services/lab_identity.py](apps/backend/app/services/lab_identity.py) 에 모았습니다.
+공통 식별자 규칙은 [apps/backend/app/services/lab_identity.py](/c:/devtest/Kubernetes-Jupyter-Sandbox/apps/backend/app/services/lab_identity.py) 에 모았습니다.
 
 - `username` 정규화
 - `session_id` 생성
@@ -131,9 +146,9 @@ sequenceDiagram
 
 이 규칙을 바탕으로:
 
-- [apps/backend/app/services/jupyter_sessions.py](apps/backend/app/services/jupyter_sessions.py)
+- [apps/backend/app/services/jupyter_sessions.py](/c:/devtest/Kubernetes-Jupyter-Sandbox/apps/backend/app/services/jupyter_sessions.py)
   가 Pod/Service/PVC mount 를 관리하고,
-- [apps/backend/app/services/jupyter_snapshots.py](apps/backend/app/services/jupyter_snapshots.py)
+- [apps/backend/app/services/jupyter_snapshots.py](/c:/devtest/Kubernetes-Jupyter-Sandbox/apps/backend/app/services/jupyter_snapshots.py)
   가 Kaniko snapshot publish/status/restore image 선택을 담당합니다.
 
 ## 이미지 전략
@@ -233,6 +248,62 @@ bash scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url ht
 bash scripts/audit_registry_scope.sh
 ```
 
+## OVA Import 후 테스트
+
+이 저장소는 빌드뿐 아니라 **OVA 를 VirtualBox 또는 VMware 에 import 한 뒤 바로 실행/검증하는 사용 시나리오**를 전제로 합니다.
+
+### 권장 VM 사양
+
+- CPU 4 core 이상
+- Memory 16GB 이상
+- Disk 100GB 이상
+- NIC 는 `Bridged Adapter` 권장
+
+### VirtualBox import 절차
+
+1. VirtualBox 에서 `파일 > 가상 시스템 가져오기`
+2. 생성된 OVA 파일 선택
+3. CPU / Memory / Disk 설정 확인
+4. 네트워크를 `Bridged Adapter` 또는 사내 테스트망에 맞게 설정
+5. VM 부팅 후 IP 확인
+
+IP 확인 예시:
+
+```bash
+hostname -I
+```
+
+또는:
+
+```bash
+ip addr
+```
+
+### 부팅 후 기본 확인
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+kubectl get svc -A
+```
+
+확인 포인트:
+
+- node 상태가 `Ready`
+- 핵심 pod 가 `Running`
+- 서비스가 `NodePort` 로 노출됨
+
+### 웹 접속 확인
+
+- Frontend: `http://<OVA_IP>:30080`
+- Backend: `http://<OVA_IP>:30081`
+- Jupyter: `http://<OVA_IP>:30088`
+- GitLab: `http://<OVA_IP>:30089`
+- Nexus: `http://<OVA_IP>:30091`
+- Harbor: `http://<OVA_IP>:30092`
+- code-server: `http://<OVA_IP>:30100`
+- Frontend Dev: `http://<OVA_IP>:31080`
+
 ## Frontend / API
 
 - Frontend 로그인 계정
@@ -255,6 +326,74 @@ bash scripts/audit_registry_scope.sh
 Frontend 는 로그인 모드에 따라 사용자용 Jupyter sandbox 화면 또는 관리자용 monitoring/control-plane 화면을 보여주며, 세션 상태, snapshot 상태, 사용자별 pod 실행 여부와 사용 지표를 함께 노출합니다.
 
 Airflow 는 현재 `platform_health_check` DAG 기반의 샘플 오케스트레이션 역할이며, Jupyter sandbox / GitLab / offline bundle 핵심 경로에는 필수는 아닙니다. 폐쇄망 최소 실행용으로는 backend 와 frontend 를 하나의 pod 로 묶은 offline suite 도 추가했습니다.
+
+## Frontend 개발 환경
+
+이 OVA 는 운영 Frontend 뿐 아니라 **폐쇄망 내 Vue 개발 환경**도 함께 제공합니다.
+
+구성은 다음과 같습니다.
+
+- 운영 Frontend: Kubernetes NodePort `30080`
+- 개발 Frontend: Vite dev server `31080`
+- IDE: `code-server` `30100`
+- 패키지 공급: Nexus npm registry + offline npm cache
+
+### code-server 접속
+
+```text
+http://<OVA_IP>:30100
+```
+
+로그인 후 다음 경로를 엽니다.
+
+```text
+/opt/k8s-data-platform/apps/frontend
+```
+
+### 의존성 설치
+
+```bash
+bash /opt/k8s-data-platform/scripts/frontend_dev_setup.sh
+```
+
+동작 우선순위:
+
+1. Nexus npm registry 사용
+2. 실패 시 offline npm cache 사용
+
+수동 설정 예시:
+
+```bash
+npm config set registry http://127.0.0.1:30091/repository/npm-group/
+```
+
+### 개발 서버 실행
+
+```bash
+bash /opt/k8s-data-platform/scripts/run_frontend_dev.sh
+```
+
+브라우저 접속:
+
+```text
+http://<OVA_IP>:31080
+```
+
+### Backend API 연동 예시
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:30081
+```
+
+### Frontend 협업 예시
+
+```bash
+git clone http://127.0.0.1:30089/dev2/platform-frontend.git
+cd platform-frontend
+git add .
+git commit -m "update"
+git push origin main
+```
 
 ### Demo Screenshots
 
@@ -315,6 +454,8 @@ OVA provisioning 시 아래 항목을 미리 넣도록 구성했습니다.
 - vim, curl, git, jq, rsync, zip, unzip, wget
 - `/opt/k8s-data-platform/scripts`
 - `/opt/k8s-data-platform/docs`
+- `/opt/k8s-data-platform/apps/frontend`
+- `code-server`
 - platform/app images preload
 - `/opt/k8s-data-platform/offline-bundle`
 
@@ -344,11 +485,29 @@ bash scripts/apply_offline_suite.sh
 bash scripts/import_offline_bundle.sh --bundle-dir dist/offline-bundle --apply --env dev
 ```
 
+## 오프라인 사용 전략
+
+폐쇄망 환경에서는 다음 순서로 동작하는 것을 기본값으로 봅니다.
+
+1. OVA 내부 preload 이미지와 도구로 기본 클러스터 기동
+2. `offline-bundle` 을 이용해 필요한 이미지/패키지 import
+3. Nexus 로 Python / npm 패키지 캐시 제공
+4. Harbor 는 사용자 snapshot 저장소로 활용
+5. 모든 외부 노출은 `NodePort` 로 접근
+
+즉, 인터넷 연결 없이도 다음이 가능해야 합니다.
+
+- 플랫폼 서비스 기동
+- 사용자별 Jupyter 세션 생성/복원
+- GitLab 저장소 clone/push
+- Frontend 의존성 설치 및 Vite 실행
+- Harbor snapshot publish/restore
+
 ## GitHub Actions
 
 변경된 컨테이너 자산을 Docker Hub 로 보내는 workflow 를 추가했습니다.
 
-- workflow: [.github/workflows/publish-images.yml](.github/workflows/publish-images.yml)
+- workflow: [.github/workflows/publish-images.yml](/c:/devtest/Kubernetes-Jupyter-Sandbox/.github/workflows/publish-images.yml)
 - required secrets:
   - `DOCKERHUB_USERNAME`
   - `DOCKERHUB_TOKEN`
@@ -381,18 +540,48 @@ bash scripts/install_git_hooks.sh
 - JupyterLab: `30088`
 - GitLab Web: `30089`
 - Airflow: `30090`
+- Nexus: `30091`
+- Harbor: `30092`
+- code-server: `30100`
+- Frontend Dev (Vite): `31080`
 - GitLab SSH: `30224`
+
+## 테스트 체크리스트
+
+OVA import 후 아래 항목을 순서대로 확인하면 기본 검증이 가능합니다.
+
+- VM 부팅 완료
+- `kubectl get nodes` 결과가 `Ready`
+- `kubectl get pods -A` 결과에서 핵심 Pod 가 `Running`
+- Frontend / Backend / GitLab / Nexus / Harbor / code-server 접속 가능
+- `frontend_dev_setup.sh` 실행 가능
+- `run_frontend_dev.sh` 실행 후 `31080` 접속 가능
+- GitLab clone / commit / push 가능
+- Harbor push/pull 또는 snapshot publish 가능
+- 인터넷 없이 재부팅 후 서비스 재확인 가능
 
 ## 주요 파일
 
-- OVA template: [packer/k8s-data-platform.pkr.hcl](packer/k8s-data-platform.pkr.hcl)
-- Ansible playbook: [ansible/playbook.yml](ansible/playbook.yml)
-- Docker runtime role: [ansible/roles/container_runtime/tasks/main.yml](ansible/roles/container_runtime/tasks/main.yml)
-- Platform bootstrap: [ansible/roles/platform_bootstrap/tasks/main.yml](ansible/roles/platform_bootstrap/tasks/main.yml)
-- Base k8s manifests: [infra/k8s/base/kustomization.yaml](infra/k8s/base/kustomization.yaml)
-- Session controller: [apps/backend/app/services/jupyter_sessions.py](apps/backend/app/services/jupyter_sessions.py)
-- Snapshot controller: [apps/backend/app/services/jupyter_snapshots.py](apps/backend/app/services/jupyter_snapshots.py)
-- Frontend dashboard: [apps/frontend/src/App.vue](apps/frontend/src/App.vue)
-- Local build/publish: [scripts/build_k8s_images.sh](scripts/build_k8s_images.sh)
-- Offline bundle: [scripts/prepare_offline_bundle.sh](scripts/prepare_offline_bundle.sh)
-- Offline import/apply: [scripts/import_offline_bundle.sh](scripts/import_offline_bundle.sh)
+- OVA template: [packer/k8s-data-platform.pkr.hcl](/c:/devtest/Kubernetes-Jupyter-Sandbox/packer/k8s-data-platform.pkr.hcl)
+- Ansible playbook: [ansible/playbook.yml](/c:/devtest/Kubernetes-Jupyter-Sandbox/ansible/playbook.yml)
+- Docker runtime role: [ansible/roles/container_runtime/tasks/main.yml](/c:/devtest/Kubernetes-Jupyter-Sandbox/ansible/roles/container_runtime/tasks/main.yml)
+- Platform bootstrap: [ansible/roles/platform_bootstrap/tasks/main.yml](/c:/devtest/Kubernetes-Jupyter-Sandbox/ansible/roles/platform_bootstrap/tasks/main.yml)
+- Base k8s manifests: [infra/k8s/base/kustomization.yaml](/c:/devtest/Kubernetes-Jupyter-Sandbox/infra/k8s/base/kustomization.yaml)
+- Session controller: [apps/backend/app/services/jupyter_sessions.py](/c:/devtest/Kubernetes-Jupyter-Sandbox/apps/backend/app/services/jupyter_sessions.py)
+- Snapshot controller: [apps/backend/app/services/jupyter_snapshots.py](/c:/devtest/Kubernetes-Jupyter-Sandbox/apps/backend/app/services/jupyter_snapshots.py)
+- Frontend dashboard: [apps/frontend/src/App.vue](/c:/devtest/Kubernetes-Jupyter-Sandbox/apps/frontend/src/App.vue)
+- Local build/publish: [scripts/build_k8s_images.sh](/c:/devtest/Kubernetes-Jupyter-Sandbox/scripts/build_k8s_images.sh)
+- Offline bundle: [scripts/prepare_offline_bundle.sh](/c:/devtest/Kubernetes-Jupyter-Sandbox/scripts/prepare_offline_bundle.sh)
+- Offline import/apply: [scripts/import_offline_bundle.sh](/c:/devtest/Kubernetes-Jupyter-Sandbox/scripts/import_offline_bundle.sh)
+
+## 결론
+
+이 저장소는 단순히 Kubernetes manifest 모음이 아니라, 다음을 하나의 OVA 안에 통합하려는 목적을 갖고 있습니다.
+
+- Kubernetes 실행 환경
+- DevOps 협업 도구
+- Jupyter 기반 사용자 sandbox
+- Frontend 개발 환경
+- 오프라인 패키지 및 이미지 번들
+
+즉, **폐쇄망 Kubernetes + DevOps + Frontend 개발 환경을 하나의 OVA 로 제공하는 실행형 플랫폼**이 이 저장소의 핵심 방향입니다.
