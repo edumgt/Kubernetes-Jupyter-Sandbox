@@ -45,15 +45,16 @@ source "virtualbox-iso" "k8s_data_platform" {
   communicator     = "ssh"
   ssh_username     = var.ssh_username
   ssh_password     = var.ssh_password
-  ssh_timeout      = "30m"
+  ssh_timeout      = "60m"
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
 
-  boot_wait = "5s"
+  boot_wait = "25s"
   boot_command = [
-    "c<wait>",
-    "linux /casper/vmlinuz autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ---<enter>",
-    "initrd /casper/initrd<enter>",
-    "boot<enter>"
+    "<wait><wait><wait><esc><wait>",
+    "e<wait>",
+    "<down><down><down><end><wait>",
+    " autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/'<wait>",
+    "<f10><wait>"
   ]
 }
 

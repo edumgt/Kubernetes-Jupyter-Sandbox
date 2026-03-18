@@ -4,7 +4,7 @@ autoinstall:
   identity:
     hostname: k8s-data-platform
     username: ubuntu
-    password: "$6$rounds=4096$abcdefghijklmnopqrst$B5M6d3VYQ8W0h0fF0sQ4t6h4iQvO3w2c1m4v8Jxv5T7y6S7Fv8y6c3l9CjC9mPzM4Ciq9Qe8bWJrjXrQepKQW0"
+    password: "$6$codexubuntu$QcR.tBJILzOz0qKkI1S4CWYQMS228FMl8h6OtOEacWmmkHXH0pwdhKbY9fvq7PnVK1rnL0J1htg2iMV2Q.wB21"
   ssh:
     install-server: true
     allow-pw: true

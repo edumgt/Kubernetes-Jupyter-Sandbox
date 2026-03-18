@@ -7,6 +7,7 @@ PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.auto.pkrvars.hcl}"
 DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist}"
 EXPORTER="${EXPORTER:-auto}"
+PACKER_BIN="${PACKER_BIN:-packer}"
 SKIP_EXPORT=0
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -26,6 +27,19 @@ is_wsl() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+resolve_packer_bin() {
+  if command -v "${PACKER_BIN}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v packer.exe >/dev/null 2>&1; then
+    PACKER_BIN="packer.exe"
+    return 0
+  fi
+
+  die "Required command not found: packer"
 }
 
 run_in_dir() {
@@ -92,17 +106,17 @@ done
 is_wsl || die "scripts/run_wsl.sh must be executed inside WSL."
 
 if [[ "${DRY_RUN}" != "1" ]]; then
-  require_command packer
+  resolve_packer_bin
 fi
 
 log "Running packer init"
-run_in_dir "${PACKER_DIR}" packer init .
+run_in_dir "${PACKER_DIR}" "${PACKER_BIN}" init .
 
 log "Running packer validate"
-run_in_dir "${PACKER_DIR}" packer validate "-var-file=${PACKER_VARS}" "${PACKER_TEMPLATE}"
+run_in_dir "${PACKER_DIR}" "${PACKER_BIN}" validate "-var-file=${PACKER_VARS}" "${PACKER_TEMPLATE}"
 
 log "Running packer build"
-run_in_dir "${PACKER_DIR}" packer build "-var-file=${PACKER_VARS}" "${PACKER_TEMPLATE}"
+run_in_dir "${PACKER_DIR}" "${PACKER_BIN}" build "-var-file=${PACKER_VARS}" "${PACKER_TEMPLATE}"
 
 if [[ "${SKIP_EXPORT}" != "1" ]]; then
   log "Running OVA export"
