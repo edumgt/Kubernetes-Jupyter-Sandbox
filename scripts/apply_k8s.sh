@@ -51,6 +51,22 @@ run_cmd() {
   "$@"
 }
 
+run_kubectl_cmd() {
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    printf '+ kubectl'
+    printf ' %q' "$@"
+    printf '\n'
+    return 0
+  fi
+
+  if [[ -z "${KUBECONFIG:-}" && -f /etc/kubernetes/admin.conf ]]; then
+    env KUBECONFIG=/etc/kubernetes/admin.conf kubectl "$@"
+    return
+  fi
+
+  kubectl "$@"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
@@ -79,12 +95,12 @@ done
 require_command kubectl
 set_environment "${ENVIRONMENT}"
 
-run_cmd kubectl apply -k "${ROOT_DIR}/infra/k8s/overlays/${ENVIRONMENT}"
+run_kubectl_cmd apply -k "${ROOT_DIR}/infra/k8s/overlays/${ENVIRONMENT}"
 
 if [[ "${WITH_RUNNER}" == "1" ]]; then
-  run_cmd kubectl apply -k "${ROOT_DIR}/infra/k8s/runner/overlays/${ENVIRONMENT}"
+  run_kubectl_cmd apply -k "${ROOT_DIR}/infra/k8s/runner/overlays/${ENVIRONMENT}"
 fi
 
 if [[ "${DRY_RUN}" != "1" ]]; then
-  kubectl get pods -n "${NAMESPACE}"
+  run_kubectl_cmd get pods -n "${NAMESPACE}"
 fi

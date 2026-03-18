@@ -6,6 +6,7 @@ namespace: data-platform-dev
 resources:
   - ../../base
   - namespace.yaml
+  - local-pv.yaml
 
 labels:
   - pairs:

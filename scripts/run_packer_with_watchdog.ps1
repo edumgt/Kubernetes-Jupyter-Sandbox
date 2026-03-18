@@ -5,7 +5,10 @@ Param(
   [string]$LogPath = "C:\devtest\Kubernetes-Jupyter-Sandbox\packer\packer-build-watchdog.log",
   [string]$VmName = "k8s-data-platform",
   [string]$VirtualBoxVmRoot = "C:\Users\1\VirtualBox VMs",
-  [int]$IdleMinutes = 20,
+  [int]$IdleMinutes = 12,
+  [int]$MaxRuntimeMinutes = 18,
+  [int]$MaxSshAuthFailures = 10,
+  [int]$AuthFailureGraceMinutes = 8,
   [int]$PollSeconds = 30,
   [ValidateSet("abort", "ask", "cleanup", "run-cleanup-provisioner")]
   [string]$OnError = "abort",
@@ -132,6 +135,9 @@ $buildArgs += $Template
 Write-Status "Starting packer build with watchdog"
 Write-Status "Log path: $LogPath"
 Write-Status "Idle timeout: $IdleMinutes minutes"
+Write-Status "Max runtime: $MaxRuntimeMinutes minutes"
+Write-Status "Max SSH auth failures in log tail: $MaxSshAuthFailures"
+Write-Status "SSH auth failure grace period: $AuthFailureGraceMinutes minutes"
 Write-Status "On-error policy: $OnError"
 
 $env:PACKER_LOG = "1"
@@ -147,9 +153,49 @@ $process = Start-Process `
 
 $lastState = Get-LogState -Path $LogPath
 $lastProgressAt = Get-Date
+$startedAt = Get-Date
+$sshConnected = $false
+
+function Stop-PackerProcess {
+  param(
+    [System.Diagnostics.Process]$TargetProcess,
+    [string]$Reason
+  )
+  Write-Status $Reason
+  try {
+    Stop-Process -Id $TargetProcess.Id -Force
+  } catch {
+    Write-Status "Process already stopped."
+  }
+}
 
 while (!$process.HasExited) {
   Start-Sleep -Seconds $PollSeconds
+
+  $elapsed = (Get-Date) - $startedAt
+  if ($elapsed.TotalMinutes -ge $MaxRuntimeMinutes) {
+    Stop-PackerProcess -TargetProcess $process -Reason ("Max runtime exceeded ({0:n1} minutes). Stopping packer build process." -f $elapsed.TotalMinutes)
+    break
+  }
+
+  if (Test-Path $LogPath) {
+    $recentLines = Get-Content $LogPath -Tail 220
+    if (!$sshConnected) {
+      $connectedHits = ($recentLines | Select-String -SimpleMatch "Connected to SSH!").Count
+      if ($connectedHits -gt 0) {
+        $sshConnected = $true
+        Write-Status "SSH connection established. Disabling pre-connection auth-failure guard."
+      }
+    }
+
+    if (!$sshConnected -and $elapsed.TotalMinutes -ge $AuthFailureGraceMinutes) {
+      $authFailures = ($recentLines | Select-String -SimpleMatch "unable to authenticate, attempted methods [none password]").Count
+      if ($authFailures -ge $MaxSshAuthFailures) {
+        Stop-PackerProcess -TargetProcess $process -Reason ("Detected repeated SSH password auth failures ({0} in recent log tail). Stopping packer build process." -f $authFailures)
+        break
+      }
+    }
+  }
 
   $currentState = Get-LogState -Path $LogPath
   $changed = $false
@@ -171,12 +217,7 @@ while (!$process.HasExited) {
   Write-Status ("No log change for {0:n1} minutes" -f $idleFor.TotalMinutes)
 
   if ($idleFor.TotalMinutes -ge $IdleMinutes) {
-    Write-Status "Idle timeout exceeded. Stopping packer build process."
-    try {
-      Stop-Process -Id $process.Id -Force
-    } catch {
-      Write-Status "Process already stopped."
-    }
+    Stop-PackerProcess -TargetProcess $process -Reason "Idle timeout exceeded. Stopping packer build process."
     break
   }
 }

@@ -35,9 +35,20 @@
   args:
     creates: /usr/bin/pnpm
 
-- name: Install code-server globally
-  npm:
-    name: code-server
-    global: true
-    unsafe_perm: true
-    state: present
+- name: Check code-server binary
+  stat:
+    path: /usr/bin/code-server
+  register: code_server_binary
+
+- name: Install code-server
+  when: not code_server_binary.stat.exists
+  block:
+    - name: Install code-server globally with npm
+      npm:
+        name: code-server
+        global: true
+        unsafe_perm: true
+        state: present
+  rescue:
+    - name: Install code-server with official install script fallback
+      shell: curl -fsSL https://code-server.dev/install.sh | sh

@@ -53,6 +53,22 @@ run_cmd() {
   "$@"
 }
 
+run_kubectl_cmd() {
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    printf '+ kubectl'
+    printf ' %q' "$@"
+    printf '\n'
+    return 0
+  fi
+
+  if [[ -z "${KUBECONFIG:-}" && -f /etc/kubernetes/admin.conf ]]; then
+    env KUBECONFIG=/etc/kubernetes/admin.conf kubectl "$@"
+    return
+  fi
+
+  kubectl "$@"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
@@ -86,12 +102,12 @@ require_command kubectl
 set_environment "${ENVIRONMENT}"
 
 if [[ "${DELETE_NAMESPACE}" == "1" ]]; then
-  run_cmd kubectl delete namespace "${NAMESPACE}" --ignore-not-found
+  run_kubectl_cmd delete namespace "${NAMESPACE}" --ignore-not-found
   exit 0
 fi
 
 if [[ "${WITH_RUNNER}" == "1" ]]; then
-  run_cmd kubectl delete -k "${ROOT_DIR}/infra/k8s/runner/overlays/${ENVIRONMENT}" --ignore-not-found
+  run_kubectl_cmd delete -k "${ROOT_DIR}/infra/k8s/runner/overlays/${ENVIRONMENT}" --ignore-not-found
 fi
 
-run_cmd kubectl delete -k "${ROOT_DIR}/infra/k8s/overlays/${ENVIRONMENT}" --ignore-not-found
+run_kubectl_cmd delete -k "${ROOT_DIR}/infra/k8s/overlays/${ENVIRONMENT}" --ignore-not-found

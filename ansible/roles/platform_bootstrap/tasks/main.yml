@@ -32,6 +32,9 @@
     dest: /opt/k8s-data-platform/scripts/
     mode: preserve
 
+- name: Normalize shell script line endings
+  shell: find /opt/k8s-data-platform/scripts -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+
 - name: Copy documentation to host
   copy:
     src: "{{ playbook_dir }}/../docs/"

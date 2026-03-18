@@ -51,10 +51,10 @@ source "virtualbox-iso" "k8s_data_platform" {
   boot_wait = "25s"
   boot_command = [
     "<wait><wait><wait><esc><wait>",
-    "e<wait>",
-    "<down><down><down><end><wait>",
-    " autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/'<wait>",
-    "<f10><wait>"
+    "c<wait>",
+    "linux /casper/vmlinuz autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ---<enter><wait>",
+    "initrd /casper/initrd<enter><wait>",
+    "boot<enter><wait>"
   ]
 }
 

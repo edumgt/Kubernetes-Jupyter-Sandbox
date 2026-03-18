@@ -788,3 +788,29 @@ VM 내부에서 직접 실행하고 싶다면:
 ```bash
 sudo bash /tmp/k8s-data-platform-src/scripts/bootstrap_local_vm.sh --repo-root /tmp/k8s-data-platform-src
 ```
+
+## VirtualBox OVA Validation (2026-03-18)
+
+This repository was validated on VirtualBox with an imported `k8s-data-platform` VM.
+
+- VM console capture: `docs/screenshots/ova-proof-vm-console.png`
+- Full validation log: [docs/ova-proof-20260318.md](docs/ova-proof-20260318.md)
+
+Quick proof commands (after VM login):
+
+```bash
+kubectl version --client
+kubeadm version
+docker --version
+kubectl get nodes -o wide
+kubectl get pods -n data-platform-dev -o wide
+kubectl get svc -n data-platform-dev
+```
+
+Validation summary:
+
+- `kubectl`, `kubeadm`, `docker`, `node`, `npm`, `code-server` installed and verified.
+- Single-node Kubernetes is `Ready`.
+- Dev overlay deploy works in VM and NodePort services are created.
+- Local hostPath PV mapping for dev overlay is included for PVC binding.
+- Known gap in this validation run: `nexus` pod image pull failed for `docker.io/edumgt/platform-nexus3:3.90.1-alpine`.

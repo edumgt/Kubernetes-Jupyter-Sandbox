@@ -38,15 +38,39 @@ spec:
     spec:
       securityContext:
         fsGroup: 200
+      initContainers:
+        - name: prepare-nexus-workdir
+          image: docker.io/edumgt/platform-nexus3:3.90.1-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /opt/sonatype/sonatype-work/nexus3/log/audit
+              mkdir -p /opt/sonatype/sonatype-work/nexus3/tmp
+              mkdir -p /opt/sonatype/sonatype-work/nexus3/javaprefs
+              chown -R 200:200 /opt/sonatype/sonatype-work/nexus3
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: nexus-data
+              mountPath: /opt/sonatype/sonatype-work/nexus3
       containers:
         - name: nexus
           image: docker.io/edumgt/platform-nexus3:3.90.1-alpine
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
           ports:
             - containerPort: 8081
           env:
+            - name: NEXUS_DATA
+              value: /opt/sonatype/sonatype-work/nexus3
             - name: INSTALL4J_ADD_VM_PARAMS
-              value: -Xms768m -Xmx768m -XX:MaxDirectMemorySize=768m -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+              value: -Xms768m -Xmx768m -XX:MaxDirectMemorySize=768m -Djava.util.prefs.userRoot=/opt/sonatype/sonatype-work/nexus3/javaprefs
           readinessProbe:
             httpGet:
               path: /
@@ -67,7 +91,7 @@ spec:
               memory: 1536Mi
           volumeMounts:
             - name: nexus-data
-              mountPath: /nexus-data
+              mountPath: /opt/sonatype/sonatype-work/nexus3
       volumes:
         - name: nexus-data
           persistentVolumeClaim:
