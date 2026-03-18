@@ -44,29 +44,32 @@
 
 ```mermaid
 flowchart TD
-  A[WSL or build host] --> B[Packer]
-  B --> C[Ubuntu 24 OVA]
-  C --> D[Ansible provisioning]
-  D --> E[Docker Engine + containerd + kubeadm/kubelet/kubectl]
-  E --> F[Kubernetes single-node control plane]
+  A["WSL / Build Host"] --> B["Packer"]
+  B --> C["Ubuntu 24 OVA"]
+  C --> D["Ansible Provisioning"]
+  D --> E["Container Runtime + Kubernetes Tools"]
+  E --> F["Kubernetes Single Node (Control Plane)"]
 
-  F --> G[frontend NodePort 30080]
-  F --> H[backend NodePort 30081]
-  F --> I[shared jupyter NodePort 30088]
-  F --> J[gitlab NodePort 30089]
-  F --> K[airflow NodePort 30090 optional]
-  F --> L[mongodb + redis + pvc]
-  F --> T[nexus NodePort 30091]
+  %% Services
+  F --> G["Frontend (NodePort 30080)"]
+  F --> H["Backend API (NodePort 30081)"]
+  F --> I["Shared Jupyter (NodePort 30088)"]
+  F --> J["GitLab (NodePort 30089)"]
+  F --> K["Airflow (NodePort 30090, Optional)"]
+  F --> T["Nexus (NodePort 30091)"]
+  F --> L["MongoDB + Redis + PVC"]
 
-  H --> M[per-user session manager]
-  M --> N[user Jupyter Pod/Service]
-  N --> O[PVC subPath users/<session-id>]
-  O --> P[Kaniko snapshot Job]
-  P --> Q[Harbor user snapshot image]
+  %% Jupyter workflow
+  H --> M["Session Manager"]
+  M --> N["User Jupyter Pod"]
+  N --> O["PVC (users/session-id)"]
+  O --> P["Kaniko Snapshot Job"]
+  P --> Q["Harbor Snapshot Image"]
   Q --> M
 
-  R[docker.io/edumgt/*] --> F
-  S[/opt/k8s-data-platform/offline-bundle] --> F
+  %% External sources
+  R["docker.io/edumgt Images"] --> F
+  S["Offline Bundle (/opt/k8s-data-platform)"] --> F
 ```
 
 ## Jupyter Snapshot Sequence
@@ -75,36 +78,44 @@ flowchart TD
 sequenceDiagram
   participant U as User
   participant FE as Frontend
-  participant BE as Backend
-  participant K8S as Kubernetes API
-  participant PVC as jupyter-workspace PVC
-  participant HARBOR as Harbor
+  participant BE as Backend API
+  participant K8S as Kubernetes
+  participant PVC as Persistent Volume
+  participant HARBOR as Harbor Registry
 
-  U->>FE: Start Lab(username)
-  FE->>BE: POST /api/jupyter/sessions
-  BE->>BE: username -> session_id -> pod/service/workspace/image resolve
-  BE->>BE: check Harbor snapshot status
-  BE->>K8S: create Pod + NodePort Service
-  K8S->>PVC: mount subPath users/<session-id>
-  K8S->>PVC: init container seeds workspace if subPath is empty
-  FE->>BE: GET /api/jupyter/sessions/{username}
-  BE-->>FE: ready + nodePort + image + workspace_subpath
+  %% Start session
+  U->>FE: Start Lab
+  FE->>BE: POST /sessions
+  BE->>BE: Resolve session-id / image / workspace
+  BE->>BE: Check existing snapshot
+  BE->>K8S: Create Pod + NodePort Service
+
+  K8S->>PVC: Mount users/session-id
+  K8S->>PVC: Init container seeds workspace (if empty)
+
+  FE->>BE: GET /sessions/{user}
+  BE-->>FE: Ready (NodePort, Image, Workspace)
   FE-->>U: Open JupyterLab
 
+  %% Snapshot publish
   U->>FE: Publish Snapshot
-  FE->>BE: POST /api/jupyter/snapshots
-  BE->>K8S: create Kaniko Job
-  K8S->>PVC: read users/<session-id>
-  K8S->>HARBOR: push jupyter-user-<session-id>:latest
-  FE->>BE: GET /api/jupyter/snapshots/{username}
-  BE-->>FE: snapshot status/build result
+  FE->>BE: POST /snapshots
+  BE->>K8S: Create Kaniko Job
 
-  U->>FE: Next login
-  FE->>BE: POST /api/jupyter/sessions
-  BE->>HARBOR: prefer latest restorable snapshot image
-  BE->>K8S: recreate Pod with snapshot image
-  K8S->>PVC: reuse existing users/<session-id> subPath
-  FE-->>U: restored personal lab
+  K8S->>PVC: Read workspace
+  K8S->>HARBOR: Push image (jupyter-user-session-id:latest)
+
+  FE->>BE: GET /snapshots/{user}
+  BE-->>FE: Snapshot Status
+
+  %% Restore
+  U->>FE: Next Login
+  FE->>BE: POST /sessions
+  BE->>HARBOR: Select latest snapshot image
+  BE->>K8S: Recreate Pod with snapshot image
+  K8S->>PVC: Reuse users/session-id
+
+  FE-->>U: Restored Lab Environment
 ```
 
 ## 사용자별 세션 규칙
