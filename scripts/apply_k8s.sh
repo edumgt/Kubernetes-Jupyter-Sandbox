@@ -6,16 +6,21 @@ WITH_RUNNER=0
 DRY_RUN=0
 ENVIRONMENT="dev"
 NAMESPACE=""
+NAMESPACE_SET=0
+OVERLAY_PATH=""
+OVERLAY_DIR=""
 
 usage() {
   cat <<'EOF'
 Usage: bash scripts/apply_k8s.sh [options]
 
 Options:
-  --env <dev|prod> Apply the selected k8s environment overlay. Defaults to dev.
-  --with-runner    Apply the optional GitLab Runner k8s overlay too.
-  --dry-run        Print commands without executing them.
-  -h, --help       Show this help.
+  --env <dev|prod>      Apply the selected k8s environment overlay. Defaults to dev.
+  --overlay <path|name> Use a custom overlay path or overlay name under infra/k8s/overlays.
+  --namespace <name>    Override namespace shown by the final pod status check.
+  --with-runner         Apply the optional GitLab Runner k8s overlay too.
+  --dry-run             Print commands without executing them.
+  -h, --help            Show this help.
 EOF
 }
 
@@ -28,7 +33,9 @@ set_environment() {
   case "$1" in
     dev|prod)
       ENVIRONMENT="$1"
-      NAMESPACE="data-platform-${ENVIRONMENT}"
+      if [[ "${NAMESPACE_SET}" == "0" ]]; then
+        NAMESPACE="data-platform-${ENVIRONMENT}"
+      fi
       ;;
     *)
       die "Unsupported environment: $1 (expected: dev or prod)"
@@ -36,19 +43,35 @@ set_environment() {
   esac
 }
 
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
-}
+resolve_overlay_path() {
+  local candidate="$1"
 
-run_cmd() {
-  if [[ "${DRY_RUN}" == "1" ]]; then
-    printf '+'
-    printf ' %q' "$@"
-    printf '\n'
-    return 0
+  if [[ -z "${candidate}" ]]; then
+    printf '%s\n' "${ROOT_DIR}/infra/k8s/overlays/${ENVIRONMENT}"
+    return
   fi
 
-  "$@"
+  if [[ "${candidate}" = /* ]]; then
+    [[ -d "${candidate}" ]] || die "Overlay directory not found: ${candidate}"
+    printf '%s\n' "${candidate}"
+    return
+  fi
+
+  if [[ -d "${candidate}" ]]; then
+    printf '%s\n' "${candidate}"
+    return
+  fi
+
+  if [[ -d "${ROOT_DIR}/infra/k8s/overlays/${candidate}" ]]; then
+    printf '%s\n' "${ROOT_DIR}/infra/k8s/overlays/${candidate}"
+    return
+  fi
+
+  die "Overlay not found: ${candidate}"
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
 run_kubectl_cmd() {
@@ -74,6 +97,17 @@ while [[ $# -gt 0 ]]; do
       set_environment "$2"
       shift 2
       ;;
+    --overlay)
+      [[ $# -ge 2 ]] || die "--overlay requires a value"
+      OVERLAY_PATH="$2"
+      shift 2
+      ;;
+    --namespace)
+      [[ $# -ge 2 ]] || die "--namespace requires a value"
+      NAMESPACE="$2"
+      NAMESPACE_SET=1
+      shift 2
+      ;;
     --with-runner)
       WITH_RUNNER=1
       shift
@@ -94,8 +128,9 @@ done
 
 require_command kubectl
 set_environment "${ENVIRONMENT}"
+OVERLAY_DIR="$(resolve_overlay_path "${OVERLAY_PATH}")"
 
-run_kubectl_cmd apply -k "${ROOT_DIR}/infra/k8s/overlays/${ENVIRONMENT}"
+run_kubectl_cmd apply -k "${OVERLAY_DIR}"
 
 if [[ "${WITH_RUNNER}" == "1" ]]; then
   run_kubectl_cmd apply -k "${ROOT_DIR}/infra/k8s/runner/overlays/${ENVIRONMENT}"

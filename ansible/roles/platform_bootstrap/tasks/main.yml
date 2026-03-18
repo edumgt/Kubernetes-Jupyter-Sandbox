@@ -61,6 +61,9 @@
     - /opt/k8s-data-platform/scripts/run_frontend_dev.sh
     - /opt/k8s-data-platform/scripts/run_frontend_build.sh
     - /opt/k8s-data-platform/scripts/verify.sh
+    - /opt/k8s-data-platform/scripts/generate_join_command.sh
+    - /opt/k8s-data-platform/scripts/join_worker_node.sh
+    - /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh
 
 - name: Configure code-server environment
   copy:
@@ -195,6 +198,24 @@
       TARGET_HOST="${1:-127.0.0.1}"
       shift || true
       exec bash /opt/k8s-data-platform/scripts/verify.sh --host "${TARGET_HOST}" "$@"
+
+- name: Install platform join command helper
+  copy:
+    dest: /usr/local/bin/platform-kubeadm-join.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec sudo bash /opt/k8s-data-platform/scripts/generate_join_command.sh "$@"
+
+- name: Install platform multi-node configure helper
+  copy:
+    dest: /usr/local/bin/platform-configure-multinode.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec sudo bash /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh "$@"
 
 - name: Install platform frontend setup helper
   copy:

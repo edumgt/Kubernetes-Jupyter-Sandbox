@@ -101,7 +101,7 @@ copy_k8s_assets() {
   run_cmd mkdir -p "${bundle_k8s_dir}" "${bundle_k8s_dir}/infra" "${bundle_k8s_dir}/scripts" "${bundle_k8s_dir}/scripts/lib" "${bundle_k8s_dir}/docs"
   run_cmd cp -R "${ROOT_DIR}/infra/k8s" "${bundle_k8s_dir}/infra/"
 
-  for script_name in apply_k8s.sh reset_k8s.sh status_k8s.sh healthcheck.sh verify.sh import_offline_bundle.sh apply_offline_suite.sh audit_registry_scope.sh bootstrap_nexus_repos.sh prime_nexus_caches.sh setup_nexus_offline.sh frontend_dev_setup.sh run_frontend_dev.sh run_frontend_build.sh; do
+  for script_name in apply_k8s.sh reset_k8s.sh status_k8s.sh healthcheck.sh verify.sh import_offline_bundle.sh apply_offline_suite.sh audit_registry_scope.sh bootstrap_nexus_repos.sh prime_nexus_caches.sh setup_nexus_offline.sh frontend_dev_setup.sh run_frontend_dev.sh run_frontend_build.sh generate_join_command.sh join_worker_node.sh configure_multinode_cluster.sh; do
     run_cmd cp "${ROOT_DIR}/scripts/${script_name}" "${bundle_k8s_dir}/scripts/${script_name}"
   done
   run_cmd cp "${ROOT_DIR}/scripts/lib/kubernetes_runtime.sh" "${bundle_k8s_dir}/scripts/lib/kubernetes_runtime.sh"

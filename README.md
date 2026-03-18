@@ -814,3 +814,62 @@ Validation summary:
 - Dev overlay deploy works in VM and NodePort services are created.
 - Local hostPath PV mapping for dev overlay is included for PVC binding.
 - Known gap in this validation run: `nexus` pod image pull failed for `docker.io/edumgt/platform-nexus3:3.90.1-alpine`.
+
+## VirtualBox Multi-node 확장 (Control Plane + Worker 3대)
+
+control-plane VM(`k8s-data-platform`)이 이미 설치된 상태에서, 동일 Ubuntu 24 기반 worker VM 3대를 자동 생성/조인/분산 배치까지 수행할 수 있도록 스크립트를 추가했습니다.
+
+실행 명령:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_virtualbox_multinode.ps1 `
+  -ControlPlaneVmName k8s-data-platform `
+  -WorkerNamePrefix k8s-worker `
+  -WorkerCount 3 `
+  -Username ubuntu `
+  -Password ubuntu `
+  -ForceRecreateWorkers
+```
+
+위 스크립트가 수행하는 작업:
+
+1. VirtualBox NAT Network 생성/보정
+2. control-plane VM 기준 worker 3대 clone 생성
+3. worker 각각 hostname 지정(`k8s-worker-1..3`) + `kubeadm join`
+4. `dev-multinode` overlay 적용
+5. `kubectl get nodes/pods -o wide` 출력으로 분산 배치 상태 확인
+
+멀티노드 분산 overlay:
+
+- 경로: `infra/k8s/overlays/dev-multinode`
+- 적용 명령:
+
+```bash
+bash scripts/apply_k8s.sh --env dev --overlay dev-multinode
+```
+
+기본 배치 전략:
+
+- `backend`, `jupyter` -> `k8s-worker-1`
+- `gitlab`, `airflow` -> `k8s-worker-2`
+- `nexus`, `mongodb`, `redis` -> `k8s-worker-3`
+- `frontend` -> worker 라벨 기반 3 replicas 분산
+
+control-plane VM에서 수동 재적용/검증 명령:
+
+```bash
+sudo bash /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh \
+  --env dev \
+  --overlay dev-multinode \
+  --workers k8s-worker-1,k8s-worker-2,k8s-worker-3
+
+KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide
+KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n data-platform-dev -o wide
+```
+
+관련 스크립트:
+
+- `scripts/bootstrap_virtualbox_multinode.ps1`
+- `scripts/generate_join_command.sh`
+- `scripts/join_worker_node.sh`
+- `scripts/configure_multinode_cluster.sh`
