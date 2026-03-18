@@ -41,7 +41,14 @@ function Invoke-VBoxManage {
     [switch]$IgnoreExitCode
   )
 
-  $output = & $VBoxManagePath @Arguments 2>&1
+  $previousPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & $VBoxManagePath @Arguments 2>&1
+  } finally {
+    $ErrorActionPreference = $previousPreference
+  }
+
   if (!$IgnoreExitCode -and $LASTEXITCODE -ne 0) {
     $joined = $Arguments -join " "
     throw "VBoxManage failed ($joined): $(Join-Lines $output)"
@@ -68,6 +75,10 @@ function Ensure-VmPoweredOff {
     Invoke-VBoxManage -Arguments @("controlvm", $VmName, "poweroff") -IgnoreExitCode | Out-Null
     Start-Sleep -Seconds 4
   }
+
+  # A cloned VM can remain in "Saved" state and refuse hardware changes.
+  # Discarding saved state is safe when no running execution exists.
+  Invoke-VBoxManage -Arguments @("discardstate", $VmName) -IgnoreExitCode | Out-Null
 }
 
 function Remove-VmIfExists {
@@ -80,11 +91,35 @@ function Remove-VmIfExists {
 }
 
 function Ensure-NatNetwork {
-  $natList = Join-Lines (Invoke-VBoxManage -Arguments @("list", "natnetworks") -IgnoreExitCode)
-  if ($natList -notmatch ("NetworkName:\s+" + [regex]::Escape($NatNetworkName))) {
-    Write-Status "Creating NAT network: $NatNetworkName ($NatNetworkCidr)"
+  Write-Status "Updating NAT network: $NatNetworkName"
+  Invoke-VBoxManage -Arguments @(
+    "natnetwork", "modify",
+    "--netname", $NatNetworkName,
+    "--network", $NatNetworkCidr,
+    "--dhcp", "on",
+    "--enable"
+  ) -IgnoreExitCode | Out-Null
+
+  if ($LASTEXITCODE -eq 0) {
+    return
+  }
+
+  Write-Status "Creating NAT network: $NatNetworkName ($NatNetworkCidr)"
+  $addOutput = Invoke-VBoxManage -Arguments @(
+    "natnetwork", "add",
+    "--netname", $NatNetworkName,
+    "--network", $NatNetworkCidr,
+    "--dhcp", "on",
+    "--enable"
+  ) -IgnoreExitCode
+
+  if ($LASTEXITCODE -eq 0) {
+    return
+  }
+
+  if ((Join-Lines $addOutput) -match "already exists") {
     Invoke-VBoxManage -Arguments @(
-      "natnetwork", "add",
+      "natnetwork", "modify",
       "--netname", $NatNetworkName,
       "--network", $NatNetworkCidr,
       "--dhcp", "on",
@@ -93,14 +128,7 @@ function Ensure-NatNetwork {
     return
   }
 
-  Write-Status "Updating NAT network: $NatNetworkName"
-  Invoke-VBoxManage -Arguments @(
-    "natnetwork", "modify",
-    "--netname", $NatNetworkName,
-    "--network", $NatNetworkCidr,
-    "--dhcp", "on",
-    "--enable"
-  ) | Out-Null
+  throw "Failed to configure NAT network '$NatNetworkName': $(Join-Lines $addOutput)"
 }
 
 function Configure-VmNetwork {
