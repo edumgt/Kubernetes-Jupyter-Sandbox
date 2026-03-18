@@ -31,7 +31,7 @@
 
 - name: Copy platform healthcheck script
   copy:
-    src: ../../../scripts/healthcheck.sh
+    src: "{{ playbook_dir }}/../scripts/healthcheck.sh"
     dest: /usr/local/bin/healthcheck.sh
     mode: '0755'
 
@@ -43,7 +43,7 @@
 
 - name: Copy Kubernetes runtime helper library
   copy:
-    src: ../../../scripts/lib/kubernetes_runtime.sh
+    src: "{{ playbook_dir }}/../scripts/lib/kubernetes_runtime.sh"
     dest: /usr/local/bin/lib/kubernetes_runtime.sh
     mode: '0644'
 

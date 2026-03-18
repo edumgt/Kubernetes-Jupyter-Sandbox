@@ -1,0 +1,71 @@
+- hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - base
+    - security
+    - container_runtime
+    - kubernetes
+
+  tasks:
+    - name: Ensure platform root exists
+      file:
+        path: /opt/k8s-data-platform
+        state: directory
+        mode: '0755'
+
+    - name: Ensure platform runtime directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /opt/k8s-data-platform/logs
+        - /etc/k8s-data-platform
+
+    - name: Copy operational scripts to host
+      copy:
+        src: "{{ playbook_dir }}/../scripts/"
+        dest: /opt/k8s-data-platform/scripts/
+        mode: preserve
+
+    - name: Copy infrastructure manifests to host
+      copy:
+        src: "{{ playbook_dir }}/../infra/"
+        dest: /opt/k8s-data-platform/infra/
+        mode: preserve
+
+    - name: Copy root README to host
+      copy:
+        src: "{{ playbook_dir }}/../README.md"
+        dest: /opt/k8s-data-platform/README.md
+        mode: '0644'
+
+    - name: Ensure proof helper scripts are executable
+      file:
+        path: "{{ item }}"
+        mode: '0755'
+      loop:
+        - /opt/k8s-data-platform/scripts/status_k8s.sh
+        - /opt/k8s-data-platform/scripts/verify.sh
+
+    - name: Install platform status helper
+      copy:
+        dest: /usr/local/bin/platform-status.sh
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec bash /opt/k8s-data-platform/scripts/status_k8s.sh "$@"
+
+    - name: Install platform verify helper
+      copy:
+        dest: /usr/local/bin/platform-verify-ova.sh
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          TARGET_HOST="${1:-127.0.0.1}"
+          shift || true
+          exec bash /opt/k8s-data-platform/scripts/verify.sh --host "${TARGET_HOST}" "$@"

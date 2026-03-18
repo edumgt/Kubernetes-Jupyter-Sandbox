@@ -115,7 +115,7 @@ build {
     execute_command = "echo '${var.ssh_password}' | {{ .Vars }} sudo -S -E bash '{{ .Path }}'"
     inline = [
       "set -e",
-      "ansible-playbook -i 'localhost,' -c local /home/${var.ssh_username}/k8s-data-platform-src/ansible/playbook.yml",
+      "ansible-playbook -i 'localhost,' -c local /home/${var.ssh_username}/k8s-data-platform-src/ansible/playbook-proof.yml",
       "rm -rf /home/${var.ssh_username}/k8s-data-platform-src"
     ]
   }

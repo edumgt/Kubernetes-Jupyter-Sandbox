@@ -39,4 +39,5 @@
   npm:
     name: code-server
     global: true
+    unsafe_perm: true
     state: present

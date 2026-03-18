@@ -10,4 +10,4 @@ vmware_workstation_path   = "/mnt/c/Program Files (x86)/VMware/VMware Workstatio
 ovftool_path_windows      = "/mnt/c/Program Files/VMware/VMware OVF Tool/ovftool.exe"
 output_directory          = "output-k8s-data-platform"
 http_directory            = "http"
-headless                  = false
+headless                  = true
