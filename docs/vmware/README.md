@@ -112,6 +112,43 @@ sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get svc -n data-platform-dev
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide
 ```
 
+### 부팅 중 `Failed to fork off sandboxing environment` / `Freezing execution` 이 뜨는 경우
+
+- 예시 메시지:
+  - `Failed to fork off sandboxing environment for executing generators: Protocol error`
+  - `[!!!!!!] Failed to start up manager.`
+  - `systemd[1]: Freezing execution.`
+- 이 경우는 단순한 VMware import 경고가 아니라, Ubuntu 24.04 부팅 초기에 `systemd`가 멈춘 상태입니다.
+- 화면에 `recovering journal` 이 보였다면 비정상 종료 직후 한 번 발생했을 가능성도 있으니, 우선 VM을 완전히 종료한 뒤 다시 켜 봅니다.
+- 재부팅 후에도 같은 화면에서 멈추면 가장 확실한 복구 방법은 라이브 ISO 또는 복구 환경으로 부팅해서 `initramfs`를 다시 생성하는 것입니다.
+
+예시 절차:
+
+```bash
+sudo mount /dev/sda2 /mnt
+sudo mount --bind /dev /mnt/dev
+sudo mount --bind /dev/pts /mnt/dev/pts
+sudo mount --bind /proc /mnt/proc
+sudo mount --bind /sys /mnt/sys
+sudo mount --bind /run /mnt/run
+sudo chroot /mnt
+update-initramfs -c -k all
+exit
+sudo reboot
+```
+
+주의:
+- 루트 파티션이 `/dev/sda2`가 아닐 수 있으므로 실제 파티션명을 먼저 확인해야 합니다.
+- 가능하면 Ubuntu Server 24.04 계열 ISO의 `Try Ubuntu` 또는 recovery shell에서 작업하는 편이 안전합니다.
+- 복구 후 정상 부팅되면 아래 명령으로 상태를 다시 확인합니다.
+
+```bash
+hostname -I
+sudo systemctl is-active docker containerd kubelet
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n data-platform-dev -o wide
+```
+
 ### kubectl이 `localhost:8080`으로 붙는 경우
 
 ```bash
