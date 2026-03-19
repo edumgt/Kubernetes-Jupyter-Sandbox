@@ -502,6 +502,173 @@ bash scripts/apply_offline_suite.sh
 bash scripts/import_offline_bundle.sh --bundle-dir dist/offline-bundle --apply --env dev
 ```
 
+## 외부망 초기 구성 / 폐쇄망 전환 다이어그램
+
+아래 다이어그램은 다음 2가지 운영 구간을 분리해 설명합니다.
+
+- `A`: 외부망에서 최초 OVA/이미지/번들을 준비하는 구간
+- `B`: OVA 복제 후 폐쇄망에서 서비스 기동/업데이트를 수행하는 구간
+
+### A) 외부망 최초 구성 (Seed Build) 아키텍처
+
+```mermaid
+flowchart LR
+  DEV["Dev/Build PC (Internet)"]
+  REPO["Git Repository"]
+  PACKER["scripts/run_wsl.sh"]
+  DOCKERHUB["docker.io/edumgt/*"]
+  OVA["dist/k8s-data-platform.ova"]
+  BUNDLE["dist/offline-bundle"]
+  HYP["VirtualBox / VMware"]
+  VM["Imported OVA VM"]
+  K8S["Kubernetes (kubeadm)"]
+
+  DEV --> REPO
+  REPO --> PACKER
+  PACKER --> OVA
+  REPO --> DOCKERHUB
+  DOCKERHUB --> PACKER
+  REPO --> BUNDLE
+  PACKER --> BUNDLE
+  OVA --> HYP --> VM --> K8S
+  BUNDLE --> VM
+```
+
+### A-1) 외부망 최초 구성 순서도
+
+```mermaid
+flowchart TD
+  S["Start"] --> C1["Repo clone / pull"]
+  C1 --> C2["Packer vars 준비<br/>packer/variables.pkr.hcl"]
+  C2 --> C3["bash scripts/run_wsl.sh<br/>(init/validate/build/export)"]
+  C3 --> C4["bash scripts/build_k8s_images.sh<br/>--namespace edumgt --tag <tag>"]
+  C4 --> C5["bash scripts/prepare_offline_bundle.sh<br/>--out-dir dist/offline-bundle"]
+  C5 --> C6["OVA + offline-bundle 산출물 전달"]
+  C6 --> E["End"]
+```
+
+### A-2) 외부망 최초 구성 시퀀스
+
+```mermaid
+sequenceDiagram
+  participant Dev as Dev Engineer
+  participant Git as Git Repository
+  participant Build as Build Host (WSL)
+  participant Packer as Packer
+  participant Hub as docker.io/edumgt
+  participant Dist as dist/*
+
+  Dev->>Git: clone / pull latest
+  Dev->>Build: run_wsl.sh 실행
+  Build->>Packer: init + validate + build
+  Packer-->>Dist: k8s-data-platform.ova
+  Dev->>Build: build_k8s_images.sh 실행
+  Build->>Hub: (선택) push app/runtime images
+  Dev->>Build: prepare_offline_bundle.sh 실행
+  Build-->>Dist: offline-bundle (images, wheels, npm-cache, k8s)
+```
+
+### B) OVA 복제 후 폐쇄망 구성 아키텍처
+
+```mermaid
+flowchart LR
+  MEDIA["Offline Media<br/>(USB/NAS)"]
+  AIRGAP["Air-gapped Site"]
+  CP["Control-plane VM"]
+  W1["Worker-1"]
+  W2["Worker-2"]
+  K8S["Kubernetes Cluster"]
+  NEXUS["Nexus (pkg cache)"]
+  HARBOR["Harbor (user snapshot)"]
+  UI["Host Browser"]
+
+  MEDIA --> AIRGAP
+  AIRGAP --> CP
+  AIRGAP --> W1
+  AIRGAP --> W2
+  CP --> K8S
+  W1 --> K8S
+  W2 --> K8S
+  K8S --> NEXUS
+  K8S --> HARBOR
+  UI -->|"http://<VM_IP>:30080 등 NodePort"| K8S
+```
+
+### B-1) 폐쇄망 운영 순서도
+
+```mermaid
+flowchart TD
+  S["Start (Air-gapped)"] --> D1["OVA Import + VM Boot"]
+  D1 --> D2["Node/Pod 기본 상태 확인"]
+  D2 --> D3["offline-bundle 반입"]
+  D3 --> D4["import_offline_bundle.sh --apply --env dev"]
+  D4 --> D5["NodePort 접근 확인"]
+  D5 --> Q{"BE/FE 변경 발생?"}
+  Q -- "No" --> E["운영 지속"]
+  Q -- "Yes" --> U1["외부망 빌드 환경에서 새 tag 이미지/tar 생성"]
+  U1 --> U2["폐쇄망으로 tar 또는 번들 전달"]
+  U2 --> U3["스케줄 대상 노드 런타임에 images import"]
+  U3 --> U4["kubectl set image / rollout restart"]
+  U4 --> D5
+```
+
+### B-2) 폐쇄망 BE/FE 변경 반영 시퀀스
+
+```mermaid
+sequenceDiagram
+  participant Dev as Internet Build Host
+  participant Media as Offline Media
+  participant Ops as Air-gap Operator
+  participant Node as k8s Node Runtime(containerd)
+  participant K8S as Kubernetes API
+  participant FE as Frontend User
+
+  Dev->>Dev: backend/frontend 코드 변경 반영
+  Dev->>Dev: docker build + docker save (tar)
+  Dev->>Media: 이미지 tar / offline-bundle 복사
+  Media->>Ops: 폐쇄망 반입
+  Ops->>Node: ctr -n k8s.io images import *.tar (노드별)
+  Ops->>K8S: kubectl set image / rollout restart
+  K8S-->>FE: 새 pod 배포 완료
+  FE->>K8S: NodePort 접속으로 변경 반영 확인
+```
+
+### 폐쇄망 BE/FE 변경 운영 규칙
+
+- `docker.io` pull/push가 막혀 있으면, 이미지는 `tar` 반입 + `ctr images import`로 배포합니다.
+- `frontend`가 여러 worker에 스케줄되면, 해당 worker 모두에 같은 태그 이미지를 import 해야 합니다.
+- `imagePullPolicy: IfNotPresent` 전략을 유지하면 로컬 런타임 캐시 이미지를 우선 사용합니다.
+- `latest` 고정보다 버전 태그(`2026.03.19-1` 등) 사용이 롤백/추적에 유리합니다.
+
+예시(외부망 빌드 환경):
+
+```bash
+IMAGE_TAG=2026.03.19-1
+bash scripts/build_k8s_images.sh --namespace edumgt --tag "${IMAGE_TAG}" --skip-runtime-import
+bash scripts/prepare_offline_bundle.sh --out-dir dist/offline-bundle --namespace edumgt --tag "${IMAGE_TAG}"
+```
+
+예시(폐쇄망 적용 환경):
+
+```bash
+bash /opt/k8s-data-platform/scripts/import_offline_bundle.sh \
+  --bundle-dir /opt/k8s-data-platform/offline-bundle \
+  --apply --env dev
+```
+
+BE/FE만 수동 롤링 갱신할 때:
+
+```bash
+sudo ctr -n k8s.io images import backend.tar
+sudo ctr -n k8s.io images import frontend.tar
+
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n data-platform-dev \
+  set image deploy/backend backend=docker.io/edumgt/k8s-data-platform-backend:2026.03.19-1
+
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n data-platform-dev \
+  set image deploy/frontend frontend=docker.io/edumgt/k8s-data-platform-frontend:2026.03.19-1
+```
+
 ## 오프라인 사용 전략
 
 폐쇄망 환경에서는 다음 순서로 동작하는 것을 기본값으로 봅니다.

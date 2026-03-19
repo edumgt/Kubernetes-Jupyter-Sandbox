@@ -244,3 +244,63 @@ If stale `k8s-worker-3` node appears:
 ```bash
 KUBECONFIG=/etc/kubernetes/admin.conf kubectl delete node k8s-worker-3 --ignore-not-found
 ```
+
+---
+
+## 8) VMware Import (Settings and Cautions)
+
+Use this section when importing the same OVA into VMware Workstation/Player.
+
+### 8.1 Recommended VMware VM Settings
+
+- vCPU: 4 or more
+- Memory: 16 GB or more
+- Disk: 100 GB or more recommended
+- Firmware: keep default from imported OVA (change only if boot fails)
+- Network Adapter: `Bridged` recommended for direct NodePort access from host browser
+
+### 8.2 Import Steps (VMware)
+
+1. Open VMware Workstation/Player.
+2. Import/Open `k8s-data-platform.ova`.
+3. Review CPU/Memory/Disk and finish import.
+4. Boot VM and log in with:
+   - username: `ubuntu`
+   - password: `ubuntu`
+
+### 8.3 First Checks After Boot
+
+Inside VM:
+
+```bash
+hostname -I
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n data-platform-dev -o wide
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get svc -n data-platform-dev
+```
+
+### 8.4 Host Browser Access (VMware)
+
+In VMware mode, prefer direct `VM_IP + NodePort` access.
+
+Examples:
+- `http://<VM_IP>:30080` (frontend)
+- `http://<VM_IP>:30081` (backend)
+- `http://<VM_IP>:30088` (jupyter shared)
+- `http://<VM_IP>:30089` (gitlab web)
+
+### 8.5 Important Cautions
+
+- VirtualBox NAT forwarding commands in this document (`VBoxManage natnetwork ... --port-forward-4`) do not apply to VMware.
+- `127.0.0.1:2222`, `2201`, `2202` SSH forwarding examples are VirtualBox-specific.
+- If firewall is enabled inside VM, NodePort range may need to be allowed:
+  - `sudo ufw allow 30000:32767/tcp`
+- If `kubectl` falls back to `localhost:8080`, force kubeconfig:
+  - `sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes`
+- Multi-node auto bootstrap script in this repo is VirtualBox-only:
+  - `scripts/bootstrap_virtualbox_multinode.ps1`
+  - For VMware multi-node, worker clone/join/network setup is manual.
+
+### 8.6 Reference
+
+- VMware detailed guide: `docs/vmware/README.md`
