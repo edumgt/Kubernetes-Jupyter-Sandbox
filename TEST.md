@@ -34,6 +34,55 @@ Current Kubernetes nodes (`kubectl get nodes -o wide`):
 | mongodb | ClusterIP | 10.106.245.2 | 27017/TCP | none | internal only |
 | redis | ClusterIP | 10.96.125.129 | 6379/TCP | none | internal only |
 
+### 2.1 Windows Browser Access (frontend NodePort 30080)
+
+Important:
+- `10.101.40.171` is a Kubernetes `ClusterIP`, so Windows browser cannot open it directly.
+- Use `Node IP + NodePort`: `http://10.77.0.5:30080`
+
+From Windows PowerShell, test connectivity first:
+
+```powershell
+Test-NetConnection 10.77.0.5 -Port 30080
+```
+
+If `TcpTestSucceeded = True`, open:
+- `http://10.77.0.5:30080`
+
+If it fails, add VirtualBox NAT port-forwarding and use localhost:
+
+```powershell
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" natnetwork modify --netname k8s-data-platform-net --port-forward-4 "frontend:tcp:[127.0.0.1]:30080:[10.77.0.5]:30080"
+```
+
+Then open:
+- `http://127.0.0.1:30080`
+
+### 2.2 Localhost Mode (`127.0.0.1`) - Additional NodePort Forwarding
+
+When accessing the frontend with `http://127.0.0.1:30080`:
+- frontend page loads on `30080`
+- frontend API calls go to backend `30081`, so backend forwarding is also required
+
+Minimum required additional forwarding:
+
+```powershell
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" natnetwork modify --netname k8s-data-platform-net --port-forward-4 "backend:tcp:[127.0.0.1]:30081:[10.77.0.5]:30081"
+```
+
+Recommended commonly used forwarding rules:
+
+```powershell
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" natnetwork modify --netname k8s-data-platform-net --port-forward-4 "jupyter:tcp:[127.0.0.1]:30088:[10.77.0.5]:30088"
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" natnetwork modify --netname k8s-data-platform-net --port-forward-4 "gitlab-web:tcp:[127.0.0.1]:30089:[10.77.0.5]:30089"
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" natnetwork modify --netname k8s-data-platform-net --port-forward-4 "airflow:tcp:[127.0.0.1]:30090:[10.77.0.5]:30090"
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" natnetwork modify --netname k8s-data-platform-net --port-forward-4 "nexus:tcp:[127.0.0.1]:30091:[10.77.0.5]:30091"
+```
+
+Note:
+- Personal JupyterLab sessions use dynamically assigned NodePort values.
+- If you use localhost-only access, add an extra temporary forwarding rule for the assigned Jupyter NodePort shown in the frontend status.
+
 ---
 
 ## 3) SSH Rules Applied (Done)
@@ -98,6 +147,18 @@ Recommended method: export/import OVA.
 
 1. Power off VMs.
 2. Export OVA files:
+
+```powershell
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-data-platform poweroff
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-1 poweroff
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-2 poweroff
+
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-data-platform --output C:\tmp\k8s-data-platform.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-1 --output C:\tmp\k8s-worker-1.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-2 --output C:\tmp\k8s-worker-2.ova
+```
+
+Quick copy block (PowerShell):
 
 ```powershell
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-data-platform poweroff

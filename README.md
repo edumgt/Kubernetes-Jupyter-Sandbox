@@ -252,6 +252,23 @@ bash scripts/audit_registry_scope.sh
 
 이 저장소는 빌드뿐 아니라 **OVA 를 VirtualBox 또는 VMware 에 import 한 뒤 바로 실행/검증하는 사용 시나리오**를 전제로 합니다.
 
+VMware 전용 실행 절차는 별도 문서를 참고하세요:
+- [docs/vmware/README.md](docs/vmware/README.md)
+
+### VirtualBox VM Export (Source Host)
+
+기존 VM 3대를 OVA 로 내보낼 때 사용할 PowerShell 명령:
+
+```powershell
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-data-platform poweroff
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-1 poweroff
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-2 poweroff
+
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-data-platform --output C:\tmp\k8s-data-platform.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-1 --output C:\tmp\k8s-worker-1.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-2 --output C:\tmp\k8s-worker-2.ova
+```
+
 ### 권장 VM 사양
 
 - CPU 4 core 이상
@@ -873,3 +890,8 @@ KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n data-platform-dev -o w
 - `scripts/generate_join_command.sh`
 - `scripts/join_worker_node.sh`
 - `scripts/configure_multinode_cluster.sh`
+
+
+---
+
+![alt text](image.png)
