@@ -97,8 +97,73 @@ build {
   }
 
   provisioner "file" {
+    source      = "${path.root}/../packer"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../tests"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../.github"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../.githooks"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src"
+  }
+
+  provisioner "file" {
     source      = "${path.root}/../README.md"
     destination = "/home/${var.ssh_username}/k8s-data-platform-src/README.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../README.en.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/README.en.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../README.ja.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/README.ja.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../README.zh.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/README.zh.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../TEST.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/TEST.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../TEST.en.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/TEST.en.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../TEST.ja.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/TEST.ja.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../TEST.zh.md"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/TEST.zh.md"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../.gitignore"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/.gitignore"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../.gitlab-ci.yml"
+    destination = "/home/${var.ssh_username}/k8s-data-platform-src/.gitlab-ci.yml"
   }
 
   provisioner "shell" {
@@ -116,6 +181,10 @@ build {
     inline = [
       "set -e",
       "ansible-playbook -i 'localhost,' -c local /home/${var.ssh_username}/k8s-data-platform-src/ansible/playbook-proof.yml",
+      "rm -rf /home/${var.ssh_username}/k8s-data-platform",
+      "install -d -m 0755 /home/${var.ssh_username}/k8s-data-platform",
+      "cp -a /home/${var.ssh_username}/k8s-data-platform-src/. /home/${var.ssh_username}/k8s-data-platform/",
+      "chown -R ${var.ssh_username}:${var.ssh_username} /home/${var.ssh_username}/k8s-data-platform",
       "rm -rf /home/${var.ssh_username}/k8s-data-platform-src"
     ]
   }
