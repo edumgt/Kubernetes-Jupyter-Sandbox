@@ -2,9 +2,9 @@ packer {
   required_version = ">= 1.10.0"
 
   required_plugins {
-    virtualbox = {
-      source  = "github.com/hashicorp/virtualbox"
-      version = ">= 1.1.0"
+    vmware = {
+      source  = "github.com/hashicorp/vmware"
+      version = ">= 1.1.2"
     }
   }
 }
@@ -28,15 +28,20 @@ variable "vmware_workstation_path" {
   type    = string
   default = ""
 }
+variable "vmware_network" {
+  type    = string
+  default = "nat"
+}
 
-source "virtualbox-iso" "k8s_data_platform" {
+source "vmware-iso" "k8s_data_platform" {
   vm_name          = var.vm_name
-  guest_os_type    = "Ubuntu_64"
+  guest_os_type    = "ubuntu-64"
   cpus             = var.cpus
   memory           = var.memory
   disk_size        = var.disk_size
   headless         = var.headless
   output_directory = var.output_directory
+  network_adapter_type = "e1000e"
 
   iso_url        = var.iso_url
   iso_checksum   = var.iso_checksum
@@ -49,17 +54,21 @@ source "virtualbox-iso" "k8s_data_platform" {
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
 
   boot_wait = "25s"
+  boot_key_interval = "100ms"
   boot_command = [
-    "<wait><wait><wait><esc><wait>",
+    "<esc><wait>",
     "c<wait>",
     "linux /casper/vmlinuz autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ---<enter><wait>",
     "initrd /casper/initrd<enter><wait>",
     "boot<enter><wait>"
   ]
+
+  tools_mode          = "upload"
+  tools_upload_flavor = "linux"
 }
 
 build {
-  sources = ["source.virtualbox-iso.k8s_data_platform"]
+  sources = ["source.vmware-iso.k8s_data_platform"]
 
   provisioner "shell" {
     execute_command = "echo '${var.ssh_password}' | {{ .Vars }} sudo -S -E bash '{{ .Path }}'"
@@ -238,7 +247,7 @@ build {
     valid_exit_codes  = [0, 2300218]
     inline = [
       "apt-get update",
-      "DEBIAN_FRONTEND=noninteractive apt-get install -y ansible || true"
+      "DEBIAN_FRONTEND=noninteractive apt-get install -y ansible open-vm-tools || true"
     ]
   }
 
@@ -246,6 +255,8 @@ build {
     execute_command = "echo '${var.ssh_password}' | {{ .Vars }} sudo -S -E bash '{{ .Path }}'"
     inline = [
       "set -e",
+      "systemctl enable open-vm-tools || true",
+      "systemctl restart open-vm-tools || true",
       "ansible-playbook -i 'localhost,' -c local /tmp/k8s-data-platform-src/ansible/playbook-proof.yml",
       "rm -rf /home/${var.ssh_username}/Kubernetes-Jupyter-Sandbox",
       "install -d -m 0755 /home/${var.ssh_username}/Kubernetes-Jupyter-Sandbox",

@@ -58,8 +58,16 @@ EOF
 
   cat > "${tmp_dir}/bin/wslpath" <<EOF
 #!/usr/bin/env bash
-if [[ "\$1" == "-u" && "\$2" == 'C:\Tools\VMware OVF Tool\ovftool.exe' ]]; then
-  printf '%s\n' '${tmp_dir}/bin/ovftool.exe'
+if [[ "\$1" == "-u" ]]; then
+  if [[ "\$2" == 'C:\Tools\VMware OVF Tool\ovftool.exe' ]]; then
+    printf '%s\n' '${tmp_dir}/bin/ovftool.exe'
+    exit 0
+  fi
+  if [[ "\$2" == 'C:\ffmpeg\packer-cache' ]]; then
+    printf '%s\n' '${tmp_dir}/packer-cache'
+    exit 0
+  fi
+  printf '%s\n' '${tmp_dir}/wslpath-u-fallback'
   exit 0
 fi
 if [[ "\$1" == "-w" ]]; then
@@ -75,7 +83,7 @@ touch "$4"
 EOF
 
   chmod +x "${tmp_dir}/bin/wslpath" "${tmp_dir}/bin/ovftool.exe"
-  PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/build_ova.sh"
+  PATH="${tmp_dir}/bin:${PATH}" DIST_DIR="${tmp_dir}/dist" bash "${tmp_dir}/scripts/build_ova.sh"
 
   assert_file_exists "${tmp_dir}/dist/k8s-data-platform.ova"
 )
@@ -111,8 +119,16 @@ EOF
 
   cat > "${tmp_dir}/bin/wslpath" <<EOF
 #!/usr/bin/env bash
-if [[ "\$1" == "-u" && "\$2" == 'C:\Tools\VMware OVF Tool\ovftool.exe' ]]; then
-  printf '%s\n' '${tmp_dir}/bin/ovftool.exe'
+if [[ "\$1" == "-u" ]]; then
+  if [[ "\$2" == 'C:\Tools\VMware OVF Tool\ovftool.exe' ]]; then
+    printf '%s\n' '${tmp_dir}/bin/ovftool.exe'
+    exit 0
+  fi
+  if [[ "\$2" == 'C:\ffmpeg\packer-cache' ]]; then
+    printf '%s\n' '${tmp_dir}/packer-cache'
+    exit 0
+  fi
+  printf '%s\n' '${tmp_dir}/wslpath-u-fallback'
   exit 0
 fi
 if [[ "\$1" == "-w" ]]; then
@@ -127,8 +143,12 @@ EOF
 touch "$4"
 EOF
 
+  run_log="${tmp_dir}/run_wsl.log"
   chmod +x "${tmp_dir}/bin/packer" "${tmp_dir}/bin/wslpath" "${tmp_dir}/bin/ovftool.exe"
-  PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/run_wsl.sh"
+  if ! PATH="${tmp_dir}/bin:${PATH}" PACKER_BIN="${tmp_dir}/bin/packer" DIST_DIR="${tmp_dir}/dist" bash "${tmp_dir}/scripts/run_wsl.sh" --vars-file "${tmp_dir}/packer/variables.pkr.hcl" >"${run_log}" 2>&1; then
+    cat "${run_log}" >&2
+    return 1
+  fi
 
   assert_log_contains "${tmp_dir}/packer.log" "init ."
   assert_log_contains "${tmp_dir}/packer.log" "validate -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"

@@ -76,7 +76,7 @@ function Remove-StaleVirtualBoxState {
     [string]$VmRootPath
   )
 
-  $outputDir = Join-Path (Join-Path $RepoRootPath "packer") "output-k8s-data-platform"
+  $outputDir = "C:\ffmpeg"
   $vdiPath = Join-Path $outputDir "k8s-data-platform.vdi"
   $vmDir = Join-Path $VmRootPath $MachineName
 

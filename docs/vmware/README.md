@@ -41,11 +41,13 @@ bash scripts/run_wsl.sh
 ```
 
 산출물:
-- `dist/k8s-data-platform.ova`
+- `C:\ffmpeg\k8s-data-platform.ova`
+- `C:\ffmpeg\packer-cache\*` (Packer cache)
 
 참고:
 - 현재 Packer 템플릿은 `virtualbox-iso` 빌더를 사용합니다.
 - 즉, **빌드 단계에는 VirtualBox가 필요**할 수 있고, 실행(검증)은 VMware에서 진행할 수 있습니다.
+- OVA 생성 시 저장소는 VM 내부 `/home/ubuntu/Kubernetes-Jupyter-Sandbox`로 복제됩니다.
 
 ## 4) VMware로 OVA Import
 

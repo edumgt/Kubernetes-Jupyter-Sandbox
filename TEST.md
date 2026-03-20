@@ -155,9 +155,9 @@ Recommended method: export/import OVA.
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-1 poweroff
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-2 poweroff
 
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-data-platform --output C:\tmp\k8s-data-platform.ova
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-1 --output C:\tmp\k8s-worker-1.ova
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-2 --output C:\tmp\k8s-worker-2.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-data-platform --output C:\ffmpeg\k8s-data-platform.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-1 --output C:\ffmpeg\k8s-worker-1.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-2 --output C:\ffmpeg\k8s-worker-2.ova
 ```
 
 Quick copy block (PowerShell):
@@ -167,9 +167,9 @@ Quick copy block (PowerShell):
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-1 poweroff
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm k8s-worker-2 poweroff
 
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-data-platform --output C:\tmp\k8s-data-platform.ova
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-1 --output C:\tmp\k8s-worker-1.ova
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-2 --output C:\tmp\k8s-worker-2.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-data-platform --output C:\ffmpeg\k8s-data-platform.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-1 --output C:\ffmpeg\k8s-worker-1.ova
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" export k8s-worker-2 --output C:\ffmpeg\k8s-worker-2.ova
 ```
 
 3. Copy `.ova` files to target PC.
@@ -179,9 +179,9 @@ Quick copy block (PowerShell):
 Import OVAs:
 
 ```powershell
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" import C:\tmp\k8s-data-platform.ova --vsys 0 --vmname k8s-data-platform
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" import C:\tmp\k8s-worker-1.ova --vsys 0 --vmname k8s-worker-1
-& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" import C:\tmp\k8s-worker-2.ova --vsys 0 --vmname k8s-worker-2
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" import C:\ffmpeg\k8s-data-platform.ova --vsys 0 --vmname k8s-data-platform
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" import C:\ffmpeg\k8s-worker-1.ova --vsys 0 --vmname k8s-worker-1
+& "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" import C:\ffmpeg\k8s-worker-2.ova --vsys 0 --vmname k8s-worker-2
 ```
 
 ---

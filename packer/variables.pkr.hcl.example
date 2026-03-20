@@ -1,4 +1,4 @@
-iso_url                   = "file:///mnt/c/isos/ubuntu-24.04.2-live-server-amd64.iso"
+iso_url                   = "file:///C:/ffmpeg/ubuntu-24.04.4-live-server-amd64.iso"
 iso_checksum              = "sha256:REPLACE_ME"
 vm_name                   = "k8s-data-platform"
 cpus                      = 4
@@ -9,6 +9,6 @@ ssh_password              = "ubuntu"
 vboxmanage_path_windows   = "/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
 vmware_workstation_path   = "/mnt/c/Program Files (x86)/VMware/VMware Workstation"
 ovftool_path_windows      = "/mnt/c/Program Files/VMware/VMware OVF Tool/ovftool.exe"
-output_directory          = "output-k8s-data-platform"
+output_directory          = "C:/ffmpeg"
 http_directory            = "http"
 headless                  = true

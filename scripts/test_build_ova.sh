@@ -55,7 +55,7 @@ output_directory     = "output-k8s-data-platform"
 ovftool_path_windows = "${tool_path}"
 EOF
 
-  bash "${fixture_dir}/scripts/build_ova.sh" >/tmp/test_build_ova_native.out
+  bash "${fixture_dir}/scripts/build_ova.sh" --dist-dir "${fixture_dir}/dist" >/tmp/test_build_ova_native.out
 
   assert_file "${fixture_dir}/dist/k8s-data-platform.ova"
   assert_contains "${args_log}" "${fixture_dir}/packer/output-k8s-data-platform/k8s-data-platform.vmx"
@@ -108,7 +108,7 @@ output_directory     = "output-k8s-data-platform"
 ovftool_path_windows = "C:\Program Files\VMware\VMware OVF Tool\ovftool.exe"
 EOF
 
-  PATH="${bin_dir}:${PATH}" WSL_DISTRO_NAME="Ubuntu-Test" bash "${fixture_dir}/scripts/build_ova.sh" >/tmp/test_build_ova_wsl.out
+  PATH="${bin_dir}:${PATH}" WSL_DISTRO_NAME="Ubuntu-Test" bash "${fixture_dir}/scripts/build_ova.sh" --dist-dir "${fixture_dir}/dist" >/tmp/test_build_ova_wsl.out
 
   assert_file "${fixture_dir}/dist/k8s-data-platform.ova"
   assert_contains "${args_log}" "WIN:${fixture_dir}/packer/output-k8s-data-platform/k8s-data-platform.vmx"

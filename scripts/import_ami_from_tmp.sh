@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RAW_WIN_PATH="${RAW_WIN_PATH:-C:\\tmp\\k8s-data-platform-ami.raw}"
+RAW_WIN_PATH="${RAW_WIN_PATH:-C:\\ffmpeg\\k8s-data-platform-ami.raw}"
 REGION="${REGION:-}"
 BUCKET="${BUCKET:-}"
 S3_KEY="${S3_KEY:-}"
@@ -18,7 +18,7 @@ Options:
   --region <region>         AWS region (required)
   --bucket <bucket>         S3 bucket name (required)
   --s3-key <key>            S3 object key. Default: basename of RAW file
-  --raw-win-path <path>     Windows raw path. Default: C:\tmp\k8s-data-platform-ami.raw
+  --raw-win-path <path>     Windows raw path. Default: C:\ffmpeg\k8s-data-platform-ami.raw
   --description <text>      Import task description
   --skip-upload             Skip S3 upload and only start import-image
   --wait                    Wait until import task reaches completed/deleted

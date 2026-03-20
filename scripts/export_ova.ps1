@@ -1,7 +1,7 @@
 Param(
   [string]$VmName = "k8s-data-platform",
-  [string]$OutputDir = ".\packer\output-k8s-data-platform",
-  [string]$DistDir = ".\dist",
+  [string]$OutputDir = "C:\ffmpeg",
+  [string]$DistDir = "C:\ffmpeg",
   [ValidateSet("auto", "vboxmanage", "ovftool")]
   [string]$Exporter = "auto",
   [string]$VBoxManage = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe",

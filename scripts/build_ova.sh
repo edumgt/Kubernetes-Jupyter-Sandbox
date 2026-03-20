@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKER_VARS="${PACKER_VARS:-${ROOT_DIR}/packer/variables.pkr.hcl}"
-DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist}"
+DIST_DIR="${DIST_DIR:-C:/ffmpeg}"
 POWERSHELL_BIN="${POWERSHELL_BIN:-powershell.exe}"
 EXPORTER="${EXPORTER:-auto}"
 DEFAULT_VBOXMANAGE_WINDOWS="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
@@ -91,7 +91,7 @@ is_wsl() {
 }
 
 is_windows_style_path() {
-  [[ "$1" =~ ^[A-Za-z]:\\ ]]
+  [[ "$1" =~ ^[A-Za-z]:[\\/].* ]]
 }
 
 is_windows_executable() {
@@ -132,6 +132,35 @@ to_tool_arg() {
   fi
 
   printf '%s' "${path}"
+}
+
+normalize_root_path() {
+  local path="$1"
+
+  if is_wsl && is_windows_style_path "${path}"; then
+    require_wslpath
+    wslpath -u "${path}"
+    return 0
+  fi
+
+  resolve_from_root "${path}"
+}
+
+resolve_output_directory() {
+  local path="$1"
+
+  if is_wsl && is_windows_style_path "${path}"; then
+    require_wslpath
+    wslpath -u "${path}"
+    return 0
+  fi
+
+  if [[ "${path}" = /* ]]; then
+    printf '%s' "${path}"
+    return 0
+  fi
+
+  printf '%s' "${ROOT_DIR}/packer/${path}"
 }
 
 invoke_via_powershell() {
@@ -227,17 +256,13 @@ case "${EXPORTER}" in
   *) die "Unsupported exporter: ${EXPORTER}" ;;
 esac
 
-DIST_DIR="$(resolve_from_root "${DIST_DIR}")"
+DIST_DIR="$(normalize_root_path "${DIST_DIR}")"
 mkdir -p "${DIST_DIR}"
 
 VM_NAME="${VM_NAME:-$(read_packer_var vm_name)}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(read_packer_var output_directory)}"
 
-if [[ "${OUTPUT_DIR}" = /* ]]; then
-  VMX_DIR="${OUTPUT_DIR}"
-else
-  VMX_DIR="${ROOT_DIR}/packer/${OUTPUT_DIR}"
-fi
+VMX_DIR="$(resolve_output_directory "${OUTPUT_DIR}")"
 
 VMX_PATH="${VMX_DIR}/${VM_NAME}.vmx"
 OVA_PATH="${DIST_DIR}/${VM_NAME}.ova"

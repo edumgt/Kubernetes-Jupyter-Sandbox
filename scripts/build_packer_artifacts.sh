@@ -6,7 +6,8 @@ PACKER_DIR="${ROOT_DIR}/packer"
 PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.auto.pkrvars.hcl}"
 PACKER_BIN="${PACKER_BIN:-packer}"
-OUTPUT_WIN_DIR="${OUTPUT_WIN_DIR:-C:\\tmp}"
+OUTPUT_WIN_DIR="${OUTPUT_WIN_DIR:-C:\\ffmpeg}"
+PACKER_CACHE_WIN_DIR="${PACKER_CACHE_WIN_DIR:-C:\\ffmpeg\\packer-cache}"
 EXPORTER="${EXPORTER:-auto}"
 SKIP_PACKER_BUILD=0
 
@@ -28,11 +29,11 @@ Build and export files for these targets:
   OVA -> QEMU/KVM -> qcow2
   OVA -> AWS VM Import -> raw disk + import JSON template
 
-Outputs are written to C:\tmp by default and existing files are overwritten.
+Outputs are written to C:\ffmpeg by default and existing files are overwritten.
 
 Options:
   --vars-file PATH       Packer var file path (default: packer/variables.auto.pkrvars.hcl)
-  --output-win-dir PATH  Windows output dir (default: C:\tmp)
+  --output-win-dir PATH  Windows output dir (default: C:\ffmpeg)
   --exporter NAME        One of: auto, vboxmanage, ovftool (default: auto)
   --skip-packer-build    Skip packer init/validate/build and reuse existing VM output
   -h, --help             Show this help message
@@ -46,6 +47,10 @@ is_wsl() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+is_windows_style_path() {
+  [[ "$1" =~ ^[A-Za-z]:[\\/].* ]]
 }
 
 trim() {
@@ -209,6 +214,23 @@ resolve_packer_bin
 
 OUTPUT_DIR_WSL="$(wslpath -u "${OUTPUT_WIN_DIR}")"
 mkdir -p "${OUTPUT_DIR_WSL}"
+
+PACKER_BIN_RESOLVED="$(command -v "${PACKER_BIN}" || true)"
+if [[ -z "${PACKER_CACHE_DIR:-}" ]]; then
+  if [[ "${PACKER_BIN_RESOLVED,,}" == *.exe ]]; then
+    PACKER_CACHE_DIR="${PACKER_CACHE_WIN_DIR}"
+  else
+    PACKER_CACHE_DIR="$(wslpath -u "${PACKER_CACHE_WIN_DIR}")"
+  fi
+fi
+
+if is_windows_style_path "${PACKER_CACHE_DIR}"; then
+  mkdir -p "$(wslpath -u "${PACKER_CACHE_DIR}")"
+else
+  mkdir -p "${PACKER_CACHE_DIR}"
+fi
+export PACKER_CACHE_DIR
+log "Using PACKER_CACHE_DIR=${PACKER_CACHE_DIR}"
 
 VM_NAME="$(read_packer_var vm_name)"
 ISO_URL="$(read_packer_var iso_url)"

@@ -5,9 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKER_DIR="${ROOT_DIR}/packer"
 PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.auto.pkrvars.hcl}"
-DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist}"
+DIST_DIR="${DIST_DIR:-C:/ffmpeg}"
 EXPORTER="${EXPORTER:-auto}"
 PACKER_BIN="${PACKER_BIN:-packer}"
+PACKER_CACHE_WIN_DIR="${PACKER_CACHE_WIN_DIR:-C:\\ffmpeg\\packer-cache}"
 SKIP_EXPORT=0
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -27,6 +28,10 @@ is_wsl() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+is_windows_style_path() {
+  [[ "$1" =~ ^[A-Za-z]:[\\/].* ]]
 }
 
 resolve_packer_bin() {
@@ -104,10 +109,28 @@ done
 
 [[ -f "${PACKER_VARS}" ]] || die "Packer vars file not found: ${PACKER_VARS}"
 is_wsl || die "scripts/run_wsl.sh must be executed inside WSL."
+require_command wslpath
 
 if [[ "${DRY_RUN}" != "1" ]]; then
   resolve_packer_bin
 fi
+
+PACKER_BIN_RESOLVED="$(command -v "${PACKER_BIN}" || true)"
+if [[ -z "${PACKER_CACHE_DIR:-}" ]]; then
+  if [[ "${PACKER_BIN_RESOLVED,,}" == *.exe ]]; then
+    PACKER_CACHE_DIR="${PACKER_CACHE_WIN_DIR}"
+  else
+    PACKER_CACHE_DIR="$(wslpath -u "${PACKER_CACHE_WIN_DIR}")"
+  fi
+fi
+
+if is_windows_style_path "${PACKER_CACHE_DIR}"; then
+  mkdir -p "$(wslpath -u "${PACKER_CACHE_DIR}")"
+else
+  mkdir -p "${PACKER_CACHE_DIR}"
+fi
+export PACKER_CACHE_DIR
+log "Using PACKER_CACHE_DIR=${PACKER_CACHE_DIR}"
 
 log "Running packer init"
 run_in_dir "${PACKER_DIR}" "${PACKER_BIN}" init .
