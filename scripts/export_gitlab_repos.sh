@@ -105,7 +105,15 @@ kaniko_build:
     - >
       printf '{"auths":{"https://index.docker.io/v1/":{"username":"%s","password":"%s"}}}'
       "$DOCKERHUB_USERNAME" "$DOCKERHUB_TOKEN" > /kaniko/.docker/config.json
-    - /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/Dockerfile" --destination "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" --destination "${IMAGE_NAME}:latest"
+    - |
+      EXTRA_KANIKO_ARGS=""
+      if [ -n "${NEXUS_PYPI_INDEX_URL:-}" ]; then
+        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg PIP_INDEX_URL=${NEXUS_PYPI_INDEX_URL}"
+      fi
+      if [ -n "${NEXUS_PYPI_TRUSTED_HOST:-}" ]; then
+        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg PIP_TRUSTED_HOST=${NEXUS_PYPI_TRUSTED_HOST}"
+      fi
+      /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/Dockerfile" --destination "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" --destination "${IMAGE_NAME}:latest" ${EXTRA_KANIKO_ARGS}
 
 deploy_backend:
   stage: deploy
@@ -143,7 +151,15 @@ kaniko_build:
     - >
       printf '{"auths":{"https://index.docker.io/v1/":{"username":"%s","password":"%s"}}}'
       "$DOCKERHUB_USERNAME" "$DOCKERHUB_TOKEN" > /kaniko/.docker/config.json
-    - /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/Dockerfile" --build-arg "VITE_API_BASE_URL=${VITE_API_BASE_URL}" --destination "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" --destination "${IMAGE_NAME}:latest"
+    - |
+      EXTRA_KANIKO_ARGS=""
+      if [ -n "${NEXUS_NPM_REGISTRY:-}" ]; then
+        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg NPM_REGISTRY=${NEXUS_NPM_REGISTRY}"
+      fi
+      if [ -n "${NEXUS_NPM_AUTH_B64:-}" ]; then
+        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg NPM_AUTH_B64=${NEXUS_NPM_AUTH_B64}"
+      fi
+      /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/Dockerfile" --build-arg "VITE_API_BASE_URL=${VITE_API_BASE_URL}" --destination "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" --destination "${IMAGE_NAME}:latest" ${EXTRA_KANIKO_ARGS}
 
 deploy_frontend:
   stage: deploy

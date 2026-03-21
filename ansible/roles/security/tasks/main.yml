@@ -27,6 +27,18 @@
     port: '6443'
     proto: tcp
 
+- name: Allow kubelet secure API
+  community.general.ufw:
+    rule: allow
+    port: '10250'
+    proto: tcp
+
+- name: Allow kube-proxy healthz
+  community.general.ufw:
+    rule: allow
+    port: '10256'
+    proto: tcp
+
 - name: Allow HTTP for ingress
   community.general.ufw:
     rule: allow
@@ -44,6 +56,13 @@
     rule: allow
     port: '8472'
     proto: udp
+
+- name: Set UFW default forward policy to ACCEPT for CNI traffic
+  replace:
+    path: /etc/default/ufw
+    regexp: '^DEFAULT_FORWARD_POLICY=.*$'
+    replace: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+  register: ufw_forward_policy
 
 - name: Allow MetalLB memberlist TCP
   community.general.ufw:
@@ -120,6 +139,10 @@
 - name: Enable UFW
   community.general.ufw:
     state: enabled
+
+- name: Reload UFW when forward policy changed
+  command: ufw reload
+  when: ufw_forward_policy.changed
 
 - name: Deploy fail2ban jail.local
   copy:

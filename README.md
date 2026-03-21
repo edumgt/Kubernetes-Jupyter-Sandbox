@@ -757,6 +757,25 @@ hosts 파일 예시(Windows):
 192.168.56.240 nexus.platform.local
 ```
 
+## 관리자 계정 / 비밀번호 정리 (현재 기본 실행값)
+
+`bash ./start.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl` + `dev-3node` overlay 기준입니다. 운영 중 값이 변경되었으면 실제 cluster secret 값이 우선합니다.
+
+| 솔루션 | 접속 주소 | 관리자 ID | 비밀번호/토큰 | 근거 |
+|---|---|---|---|---|
+| VMware VM SSH (control-plane/worker) | SSH (`22`) | `ubuntu` | `ubuntu` | `packer/variables.vmware.auto.pkrvars.hcl` |
+| Platform Web(Admin 모드) | `http://platform.local` | `admin@test.com` | `123456` | `apps/backend/app/services/demo_users.py` |
+| Control-plane 전용 로그인(대체 계정) | `http://platform.local/#control-plane` | `platform-admin` | `controlplane123!` | `infra/k8s/overlays/dev-3node/platform-secrets-patch.yaml` |
+| JupyterLab(shared) | `http://jupyter.platform.local/lab` | `token` | `platform123` | `infra/k8s/overlays/dev-3node/platform-secrets-patch.yaml` |
+| GitLab (root) | `http://gitlab.platform.local` | `root` | `v7Q#2mL!9xC@4pR%8tZ` | `GITLAB_ROOT_PASSWORD` (dev overlay) |
+| Airflow | `http://airflow.platform.local` | `admin` | `admin12345!` | `AIRFLOW_ADMIN_USERNAME/PASSWORD` (dev overlay) |
+| Nexus Repository | `http://nexus.platform.local` | `admin` | `nexus123!` | `start.sh` 기본값 + `PLATFORM_NEXUS_ADMIN_PASSWORD` |
+| Harbor Snapshot Registry | `http://<CONTROL_PLANE_IP>:30092` | `PLATFORM_HARBOR_USER` | `PLATFORM_HARBOR_PASSWORD` | base secret 기본값은 `CHANGE_ME` |
+
+`prod` overlay는 별도 계정/비밀번호를 사용합니다: `infra/k8s/overlays/prod/platform-secrets-patch.yaml`.
+
+보안 권장: 실환경 배포 시 위 기본 비밀번호는 반드시 교체하세요.
+
 ## Frontend / API
 
 - Frontend 로그인 계정

@@ -92,7 +92,7 @@ WORKER2_IP="${WORKER2_IP:-}"
 
 NETWORK_CIDR_PREFIX="${NETWORK_CIDR_PREFIX:-24}"
 GATEWAY="${GATEWAY:-}"
-DNS_SERVERS="${DNS_SERVERS:-1.1.1.1,8.8.8.8}"
+DNS_SERVERS="${DNS_SERVERS:-}"
 NET_INTERFACE="${NET_INTERFACE:-}"
 
 TOKEN_TTL="${TOKEN_TTL:-2h}"
@@ -117,6 +117,10 @@ INGRESS_MANIFEST="${INGRESS_MANIFEST:-}"
 
 if ! is_true "${SKIP_NETWORK}"; then
   [[ -n "${GATEWAY}" ]] || die "GATEWAY is required unless SKIP_NETWORK=1."
+  if [[ -z "${DNS_SERVERS}" ]]; then
+    DNS_SERVERS="${GATEWAY},1.1.1.1,8.8.8.8"
+    log "DNS_SERVERS is empty. Using gateway-first default: ${DNS_SERVERS}"
+  fi
 fi
 
 require_command ssh

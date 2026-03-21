@@ -27,7 +27,7 @@ WORKER1_IP=""
 WORKER2_IP=""
 GATEWAY=""
 NETWORK_CIDR_PREFIX="${NETWORK_CIDR_PREFIX:-24}"
-DNS_SERVERS="${DNS_SERVERS:-1.1.1.1,8.8.8.8}"
+DNS_SERVERS="${DNS_SERVERS:-}"
 NET_INTERFACE="${NET_INTERFACE:-}"
 
 SSH_USER="${SSH_USER:-}"
@@ -91,7 +91,7 @@ Options:
   --worker2-ip IP           Final static IP for worker-2 (required with --static-network)
   --gateway IP              Gateway for static network (required with --static-network)
   --network-cidr-prefix N   Prefix for static network (default: 24)
-  --dns-servers CSV         DNS CSV (default: 1.1.1.1,8.8.8.8)
+  --dns-servers CSV         DNS CSV (default with static network: <gateway>,1.1.1.1,8.8.8.8)
   --net-interface IFACE     Net interface (optional, auto-detect when empty)
 
   --ssh-user USER           SSH user override (defaults from vars file ssh_username)
@@ -634,6 +634,9 @@ if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
   [[ -n "${WORKER1_IP}" ]] || die "--worker1-ip is required with --static-network"
   [[ -n "${WORKER2_IP}" ]] || die "--worker2-ip is required with --static-network"
   [[ -n "${GATEWAY}" ]] || die "--gateway is required with --static-network"
+  if [[ -z "${DNS_SERVERS}" ]]; then
+    DNS_SERVERS="${GATEWAY},1.1.1.1,8.8.8.8"
+  fi
 fi
 
 if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER2_NAME}" || "${WORKER1_NAME}" == "${WORKER2_NAME}" ]]; then

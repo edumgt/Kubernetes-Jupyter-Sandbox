@@ -28,6 +28,8 @@ metadata:
   name: nexus
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: nexus
@@ -75,16 +77,26 @@ spec:
             httpGet:
               path: /
               port: 8081
-            initialDelaySeconds: 120
+            initialDelaySeconds: 180
             periodSeconds: 20
             failureThreshold: 30
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /
               port: 8081
-            initialDelaySeconds: 240
+            initialDelaySeconds: 300
             periodSeconds: 30
             failureThreshold: 10
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: "250m"

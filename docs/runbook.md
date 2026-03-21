@@ -71,14 +71,27 @@ kubectl rollout restart deployment/airflow -n data-platform-dev
 kubectl rollout restart deployment/gitlab -n data-platform-dev
 ```
 
-## 8. Runner 활성화
+## 8. kubelet(:10250) / 이미지 Pull DNS 타임아웃 복구
+
+```bash
+sudo bash scripts/fix_kubelet_network_timeouts.sh --dns-servers 192.168.56.1,1.1.1.1,8.8.8.8
+```
+
+이 스크립트는 아래를 한 번에 보정합니다.
+
+- UFW kubelet/kube-proxy 포트 허용 (`10250/tcp`, `10256/tcp`)
+- `systemd-resolved` DNS 고정
+- kubelet `--resolv-conf` 고정 및 서비스 재시작
+- kubelet 포트 리스닝 여부와 DNS 해석 probe
+
+## 9. Runner 활성화
 
 ```bash
 bash scripts/apply_k8s.sh --env dev --with-runner
 kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
 ```
 
-## 9. 폐쇄망 번들 재생성
+## 10. 폐쇄망 번들 재생성
 
 ```bash
 bash scripts/prepare_offline_bundle.sh --out-dir dist/offline-bundle

@@ -2,8 +2,19 @@ FROM docker.io/edumgt/platform-node:22.22.0-bookworm-slim AS build
 
 WORKDIR /app
 
+ARG NPM_REGISTRY
+ARG NPM_AUTH_B64
+
 COPY package.json .
-RUN npm install
+RUN if [ -n "${NPM_REGISTRY:-}" ]; then \
+      npm config set registry "${NPM_REGISTRY}"; \
+      npm config set always-auth true; \
+      if [ -n "${NPM_AUTH_B64:-}" ]; then \
+        registry_scope="$(printf '%s' "${NPM_REGISTRY}" | sed -e 's#^https\?://##' -e 's#/*$##')"; \
+        npm config set "//${registry_scope}/:_auth" "${NPM_AUTH_B64}"; \
+      fi; \
+    fi \
+ && npm install
 
 COPY . .
 

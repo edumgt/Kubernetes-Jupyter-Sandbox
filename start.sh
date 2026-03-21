@@ -27,7 +27,7 @@ WORKER1_IP="${WORKER1_IP:-192.168.56.11}"
 WORKER2_IP="${WORKER2_IP:-192.168.56.12}"
 GATEWAY="${GATEWAY:-192.168.56.1}"
 NETWORK_CIDR_PREFIX="${NETWORK_CIDR_PREFIX:-24}"
-DNS_SERVERS="${DNS_SERVERS:-1.1.1.1,8.8.8.8}"
+DNS_SERVERS="${DNS_SERVERS:-}"
 NET_INTERFACE="${NET_INTERFACE:-}"
 
 METALLB_ADDRESS_RANGE="${METALLB_ADDRESS_RANGE:-}"
@@ -48,9 +48,12 @@ POST_REBOOT_CHECK=0
 SEED_GITLAB_BE_FE=0
 ALWAYS_PROVISION=0
 STRICT_HARBOR_CHECK=0
+SKIP_NODE_NETWORK_FIX=0
 
 NAMESPACE=""
 CONTROL_PLANE_SSH_HOST=""
+WORKER1_SSH_HOST=""
+WORKER2_SSH_HOST=""
 OUTPUT_DIR_WSL=""
 CONTROL_PLANE_VMX_WIN=""
 CONTROL_PLANE_VMX_WSL=""
@@ -125,12 +128,13 @@ Options:
   --worker2-ip IP              Default: 192.168.56.12
   --gateway IP                 Default: 192.168.56.1
   --network-cidr-prefix N      Default: 24
-  --dns-servers CSV            Default: 1.1.1.1,8.8.8.8
+  --dns-servers CSV            Default(static network): <gateway>,1.1.1.1,8.8.8.8
   --net-interface IFACE        Optional net interface override
 
   --metallb-range RANGE        Example: 192.168.56.240-192.168.56.250
   --ingress-lb-ip IP           Example: 192.168.56.240
   --skip-ingress-setup         Skip ingress/metallb setup
+  --skip-node-network-fix      Skip automatic kubelet(:10250)/DNS timeout fix on all nodes
 
   --ssh-user USER              Override SSH user (defaults from vars file ssh_username)
   --ssh-password PASS          Override SSH password (defaults from vars file ssh_password)
@@ -395,6 +399,7 @@ start_vm_if_needed() {
 }
 
 SSH_OPTS=()
+SCP_OPTS=()
 
 ssh_capture() {
   local host="$1"
@@ -418,6 +423,19 @@ ssh_run() {
   fi
 
   ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "${command}"
+}
+
+scp_copy() {
+  local src="$1"
+  local host="$2"
+  local dst="$3"
+
+  if [[ -n "${SSH_PASSWORD}" ]]; then
+    SSHPASS="${SSH_PASSWORD}" sshpass -e scp "${SCP_OPTS[@]}" "${src}" "${SSH_USER}@${host}:${dst}"
+    return
+  fi
+
+  scp "${SCP_OPTS[@]}" "${src}" "${SSH_USER}@${host}:${dst}"
 }
 
 sudo_wrap_command() {
@@ -462,6 +480,54 @@ wait_for_ssh() {
   done
 
   die "Timed out waiting SSH (${label}): ${host}"
+}
+
+resolve_worker_ssh_hosts() {
+  if [[ -n "${WORKER1_SSH_HOST}" && -n "${WORKER2_SSH_HOST}" ]]; then
+    return 0
+  fi
+
+  if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
+    WORKER1_SSH_HOST="${WORKER1_IP}"
+    WORKER2_SSH_HOST="${WORKER2_IP}"
+    return 0
+  fi
+
+  WORKER1_SSH_HOST="$(wait_for_vm_ip "${WORKER1_VMX_WIN}" "${WORKER1_NAME}")"
+  WORKER2_SSH_HOST="$(wait_for_vm_ip "${WORKER2_VMX_WIN}" "${WORKER2_NAME}")"
+}
+
+apply_node_runtime_fixes() {
+  local fix_script_local="${ROOT_DIR}/scripts/fix_kubelet_network_timeouts.sh"
+  local fix_script_remote="/tmp/fix_kubelet_network_timeouts.sh"
+  local entry
+  local label
+  local host
+  declare -A seen_hosts=()
+
+  [[ -f "${fix_script_local}" ]] || die "Missing node fix script: ${fix_script_local}"
+  resolve_worker_ssh_hosts
+
+  for entry in \
+    "control-plane:${CONTROL_PLANE_SSH_HOST}" \
+    "worker-1:${WORKER1_SSH_HOST}" \
+    "worker-2:${WORKER2_SSH_HOST}"; do
+    label="${entry%%:*}"
+    host="${entry#*:}"
+    [[ -n "${host}" ]] || die "Unable to resolve SSH host for ${label}"
+
+    if [[ -n "${seen_hosts[$host]:-}" ]]; then
+      warn "Skipping duplicate node host mapping (${label} -> ${host}, already fixed as ${seen_hosts[$host]})."
+      continue
+    fi
+    seen_hosts["${host}"]="${label}"
+
+    log "Applying kubelet/DNS timeout fix on ${label} (${host})"
+    wait_for_ssh "${host}" "${label} before node fix"
+    scp_copy "${fix_script_local}" "${host}" "${fix_script_remote}"
+    ssh_run "${host}" "chmod +x '${fix_script_remote}'"
+    ssh_run_sudo "${host}" "bash '${fix_script_remote}' --dns-servers '${DNS_SERVERS}'"
+  done
 }
 
 remote_kubectl() {
@@ -679,6 +745,174 @@ verify_gitlab_clone_access() {
   ssh_run_sudo "${host}" "${remote_cmd}"
 }
 
+resolve_nexus_prime_url() {
+  local host="$1"
+  local svc_ip
+  local pod_ip
+  local candidate_url
+  local code
+  local candidates=()
+  declare -A seen_urls=()
+
+  candidates+=("${NEXUS_URL}")
+  candidates+=("http://127.0.0.1:30091")
+
+  svc_ip="$(
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get svc nexus -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true" \
+      | tr -d '\r[:space:]'
+  )"
+  pod_ip="$(
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pod -l app=nexus -o jsonpath='{.items[0].status.podIP}' 2>/dev/null || true" \
+      | tr -d '\r[:space:]'
+  )"
+
+  if [[ -n "${svc_ip}" ]]; then
+    candidates+=("http://${svc_ip}:8081")
+  fi
+  if [[ -n "${pod_ip}" ]]; then
+    candidates+=("http://${pod_ip}:8081")
+  fi
+
+  for candidate_url in "${candidates[@]}"; do
+    [[ -n "${candidate_url}" ]] || continue
+    if [[ -n "${seen_urls[${candidate_url}]:-}" ]]; then
+      continue
+    fi
+    seen_urls["${candidate_url}"]=1
+
+    code="$(
+      ssh_capture_sudo "${host}" "curl -sS -o /dev/null -w '%{http_code}' --max-time 8 '${candidate_url}/service/rest/v1/status' || true" \
+        | tr -d '\r[:space:]'
+    )"
+    if [[ "${code}" == "200" ]]; then
+      printf '%s' "${candidate_url}"
+      return 0
+    fi
+  done
+
+  warn "Unable to auto-resolve reachable Nexus URL. Falling back to configured value: ${NEXUS_URL}"
+  printf '%s' "${NEXUS_URL}"
+}
+
+resolve_nexus_prime_current_password() {
+  local host="$1"
+  local nexus_url="$2"
+  local candidate
+  local code
+  local escaped_candidate
+  local pod_admin_password
+  local candidates=()
+  declare -A seen_passwords=()
+
+  candidates+=("${NEXUS_CURRENT_PASSWORD}")
+  candidates+=("${NEXUS_PASSWORD}")
+  candidates+=("${NEXUS_TARGET_PASSWORD}")
+
+  pod_admin_password="$(
+    ssh_capture_sudo "${host}" "set -euo pipefail; pod=\"\$(KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pod -l app=nexus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)\"; if [[ -n \"\${pod}\" ]]; then KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' exec \"\${pod}\" -- cat /nexus-data/admin.password 2>/dev/null || true; fi" \
+      | tr -d '\r[:space:]'
+  )"
+  if [[ -n "${pod_admin_password}" ]]; then
+    candidates+=("${pod_admin_password}")
+  fi
+
+  for candidate in "${candidates[@]}"; do
+    [[ -n "${candidate}" ]] || continue
+    if [[ -n "${seen_passwords[${candidate}]:-}" ]]; then
+      continue
+    fi
+    seen_passwords["${candidate}"]=1
+
+    escaped_candidate="$(escape_single_quotes "${candidate}")"
+    code="$(
+      ssh_capture_sudo "${host}" "pw='${escaped_candidate}'; curl -sS -o /dev/null -w '%{http_code}' --max-time 8 -u \"admin:\${pw}\" '${nexus_url}/service/rest/v1/status' || true" \
+        | tr -d '\r[:space:]'
+    )"
+    if [[ "${code}" == "200" ]]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+run_nexus_prime() {
+  local host="$1"
+  local setup_script="${REMOTE_REPO_ROOT}/scripts/setup_nexus_offline.sh"
+  local setup_help
+  local supports_python_seed=0
+  local supports_npm_seed=0
+  local effective_nexus_url
+  local effective_current_password=""
+  local prime_password
+  local escaped_namespace
+  local escaped_nexus_url
+  local escaped_target_password
+  local escaped_username
+  local escaped_prime_password
+  local escaped_current_password
+  local escaped_python_seed
+  local escaped_npm_seed
+  local cmd
+
+  setup_help="$(ssh_capture_sudo "${host}" "bash '${setup_script}' --help 2>/dev/null || true")"
+  if printf '%s\n' "${setup_help}" | grep -q -- '--python-seed-file'; then
+    supports_python_seed=1
+  fi
+  if printf '%s\n' "${setup_help}" | grep -q -- '--npm-seed-file'; then
+    supports_npm_seed=1
+  fi
+
+  effective_nexus_url="$(resolve_nexus_prime_url "${host}")"
+  log "Nexus prime URL: ${effective_nexus_url}"
+
+  if effective_current_password="$(resolve_nexus_prime_current_password "${host}" "${effective_nexus_url}")"; then
+    log "Nexus admin credential resolved for bootstrap."
+  else
+    warn "Unable to verify Nexus current admin password automatically. Falling back to provided values."
+    effective_current_password="${NEXUS_CURRENT_PASSWORD}"
+  fi
+
+  prime_password="${NEXUS_PASSWORD}"
+  if [[ "${NEXUS_USERNAME}" == "admin" ]]; then
+    prime_password="${NEXUS_TARGET_PASSWORD}"
+  fi
+
+  escaped_namespace="$(escape_single_quotes "${NAMESPACE}")"
+  escaped_nexus_url="$(escape_single_quotes "${effective_nexus_url}")"
+  escaped_target_password="$(escape_single_quotes "${NEXUS_TARGET_PASSWORD}")"
+  escaped_username="$(escape_single_quotes "${NEXUS_USERNAME}")"
+  escaped_prime_password="$(escape_single_quotes "${prime_password}")"
+
+  cmd="bash '${setup_script}' --namespace '${escaped_namespace}' --nexus-url '${escaped_nexus_url}' --target-password '${escaped_target_password}' --username '${escaped_username}' --password '${escaped_prime_password}'"
+
+  if [[ -n "${effective_current_password}" ]]; then
+    escaped_current_password="$(escape_single_quotes "${effective_current_password}")"
+    cmd+=" --current-password '${escaped_current_password}'"
+  fi
+
+  if [[ -n "${PYTHON_SEED_FILE_REMOTE}" ]]; then
+    if [[ "${supports_python_seed}" -eq 1 ]]; then
+      escaped_python_seed="$(escape_single_quotes "${PYTHON_SEED_FILE_REMOTE}")"
+      cmd+=" --python-seed-file '${escaped_python_seed}'"
+    else
+      warn "Remote setup_nexus_offline.sh does not support --python-seed-file. Skipping seed-file option."
+    fi
+  fi
+
+  if [[ -n "${NPM_SEED_FILE_REMOTE}" ]]; then
+    if [[ "${supports_npm_seed}" -eq 1 ]]; then
+      escaped_npm_seed="$(escape_single_quotes "${NPM_SEED_FILE_REMOTE}")"
+      cmd+=" --npm-seed-file '${escaped_npm_seed}'"
+    else
+      warn "Remote setup_nexus_offline.sh does not support --npm-seed-file. Skipping seed-file option."
+    fi
+  fi
+
+  ssh_run_sudo "${host}" "${cmd}"
+}
+
 run_post_reboot_check() {
   log "Post-reboot check: power-cycling 3 VMs"
   stop_vm_if_running "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
@@ -829,6 +1063,10 @@ while [[ $# -gt 0 ]]; do
       SETUP_INGRESS_STACK=0
       shift
       ;;
+    --skip-node-network-fix)
+      SKIP_NODE_NETWORK_FIX=1
+      shift
+      ;;
     --ssh-user)
       [[ $# -ge 2 ]] || die "--ssh-user requires a value"
       SSH_USER="$2"
@@ -974,8 +1212,16 @@ SSH_OPTS=(
   -o LogLevel=ERROR
   -o ConnectTimeout=8
 )
+SCP_OPTS=(
+  -P "${SSH_PORT}"
+  -o StrictHostKeyChecking=accept-new
+  -o UserKnownHostsFile=/dev/null
+  -o LogLevel=ERROR
+  -o ConnectTimeout=8
+)
 if [[ -n "${SSH_KEY_PATH}" ]]; then
   SSH_OPTS+=(-i "${SSH_KEY_PATH}")
+  SCP_OPTS+=(-i "${SSH_KEY_PATH}")
 fi
 
 case "${VM_START_MODE}" in
@@ -990,6 +1236,9 @@ if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
   [[ -n "${WORKER1_IP}" ]] || die "WORKER1_IP is required with --static-network"
   [[ -n "${WORKER2_IP}" ]] || die "WORKER2_IP is required with --static-network"
   [[ -n "${GATEWAY}" ]] || die "GATEWAY is required with --static-network"
+  if [[ -z "${DNS_SERVERS}" ]]; then
+    DNS_SERVERS="${GATEWAY},1.1.1.1,8.8.8.8"
+  fi
 fi
 
 if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER2_NAME}" || "${WORKER1_NAME}" == "${WORKER2_NAME}" ]]; then
@@ -1030,6 +1279,9 @@ if [[ "${RUN_PROVISION}" -eq 1 ]]; then
 else
   log "  - Reuse existing VMX (start only, no packer/delete)"
 fi
+if [[ "${SKIP_NODE_NETWORK_FIX}" -eq 0 ]]; then
+  log "  - Node runtime fixes (kubelet:10250 + DNS)"
+fi
 log "  - Cluster placement checks (nodes/pods/pvc)"
 log "  - scripts/verify.sh"
 if [[ "${SEED_GITLAB_BE_FE}" -eq 1 ]]; then
@@ -1046,6 +1298,9 @@ if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
 fi
 
 TOTAL_STEPS=3
+if [[ "${SKIP_NODE_NETWORK_FIX}" -eq 0 ]]; then
+  TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+fi
 if [[ "${SEED_GITLAB_BE_FE}" -eq 1 ]]; then
   TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 fi
@@ -1141,6 +1396,12 @@ fi
 wait_for_ssh "${CONTROL_PLANE_SSH_HOST}" "control-plane"
 
 STEP_INDEX=$(( STEP_INDEX + 1 ))
+if [[ "${SKIP_NODE_NETWORK_FIX}" -eq 0 ]]; then
+  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Fix kubelet(:10250) and DNS timeout settings"
+  apply_node_runtime_fixes
+  STEP_INDEX=$(( STEP_INDEX + 1 ))
+fi
+
 log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Validate cluster placement and HTTP endpoints"
 validate_cluster_state "${CONTROL_PLANE_SSH_HOST}"
 verify_http_endpoints "${CONTROL_PLANE_SSH_HOST}"
@@ -1157,7 +1418,7 @@ fi
 if [[ "${SKIP_NEXUS_PRIME}" -eq 0 ]]; then
   STEP_INDEX=$(( STEP_INDEX + 1 ))
   log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Prime Nexus offline repositories"
-  ssh_run_sudo "${CONTROL_PLANE_SSH_HOST}" "bash '${REMOTE_REPO_ROOT}/scripts/setup_nexus_offline.sh' --namespace '${NAMESPACE}' --nexus-url '${NEXUS_URL}' --current-password '${NEXUS_CURRENT_PASSWORD}' --target-password '${NEXUS_TARGET_PASSWORD}' --username '${NEXUS_USERNAME}' --password '${NEXUS_PASSWORD}' --python-seed-file '${PYTHON_SEED_FILE_REMOTE}' --npm-seed-file '${NPM_SEED_FILE_REMOTE}'"
+  run_nexus_prime "${CONTROL_PLANE_SSH_HOST}"
 fi
 
 if [[ "${POST_REBOOT_CHECK}" -eq 1 ]]; then

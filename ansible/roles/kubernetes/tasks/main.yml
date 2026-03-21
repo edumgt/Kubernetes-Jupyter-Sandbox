@@ -38,6 +38,22 @@
   command: sysctl --system
   changed_when: false
 
+- name: Ensure systemd-resolved drop-in directory exists
+  file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Configure node DNS resolver defaults
+  copy:
+    dest: /etc/systemd/resolved.conf.d/99-k8s-data-platform.conf
+    mode: '0644'
+    content: |
+      [Resolve]
+      DNS={{ kubernetes_node_dns_servers | join(' ') }}
+      FallbackDNS=1.1.1.1 8.8.8.8
+  register: node_resolver_config
+
 - name: Install containerd package
   apt:
     name:
@@ -124,11 +140,32 @@
     - kubeadm
     - kubectl
 
+- name: Configure kubelet to use non-stub resolv.conf
+  lineinfile:
+    path: /etc/default/kubelet
+    regexp: '^KUBELET_EXTRA_ARGS='
+    line: 'KUBELET_EXTRA_ARGS="--resolv-conf={{ kubernetes_kubelet_resolv_conf }}"'
+    create: true
+    mode: '0644'
+  register: kubelet_resolv_args
+
+- name: Restart systemd-resolved when DNS config changed
+  service:
+    name: systemd-resolved
+    state: restarted
+  when: node_resolver_config.changed
+
 - name: Ensure kubelet service started
   service:
     name: kubelet
     enabled: true
     state: started
+
+- name: Restart kubelet when resolv.conf args changed
+  service:
+    name: kubelet
+    state: restarted
+  when: kubelet_resolv_args.changed
 
 - name: Initialize Kubernetes control plane
   command:
