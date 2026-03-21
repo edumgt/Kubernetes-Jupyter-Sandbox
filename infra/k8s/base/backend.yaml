@@ -104,6 +104,13 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
           env:
             - name: PLATFORM_K8S_NAMESPACE
               valueFrom:
