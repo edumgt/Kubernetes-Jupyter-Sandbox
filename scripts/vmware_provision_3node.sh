@@ -720,6 +720,9 @@ if [[ "${CONTROL_PLANE_SSH_HOST}" == "${WORKER1_SSH_HOST}" || "${CONTROL_PLANE_S
   if [[ "${SKIP_BOOTSTRAP}" -eq 1 ]]; then
     log "WARNING: Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST})."
     log "WARNING: For stable multi-node bootstrap, rerun with --static-network and unique IPs."
+  elif [[ "${STATIC_NETWORK}" -eq 1 ]]; then
+    log "WARNING: Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST})."
+    log "WARNING: Continuing because --static-network is enabled; bootstrap will assign unique static IPs."
   else
     die "Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST}). Rerun with --static-network and unique control-plane/worker IPs."
   fi

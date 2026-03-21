@@ -42,7 +42,7 @@ spec:
   ports:
     - name: http
       port: 8929
-      targetPort: 30089
+      targetPort: 80
       nodePort: 30089
     - name: ssh
       port: 22
@@ -70,7 +70,7 @@ spec:
           image: docker.io/edumgt/platform-gitlab-ce:17.10.0-ce.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 30089
+            - containerPort: 80
             - containerPort: 22
           env:
             - name: GITLAB_ROOT_PASSWORD
@@ -83,27 +83,6 @@ spec:
                 external_url 'http://localhost:30089'
                 gitlab_rails['gitlab_shell_ssh_port'] = 30224
                 gitlab_rails['initial_root_password'] = ENV['GITLAB_ROOT_PASSWORD']
-          startupProbe:
-            httpGet:
-              path: /users/sign_in
-              port: 30089
-            initialDelaySeconds: 120
-            periodSeconds: 20
-            failureThreshold: 30
-          readinessProbe:
-            httpGet:
-              path: /users/sign_in
-              port: 30089
-            initialDelaySeconds: 30
-            periodSeconds: 20
-            failureThreshold: 10
-          livenessProbe:
-            httpGet:
-              path: /users/sign_in
-              port: 30089
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            failureThreshold: 5
           resources:
             requests:
               cpu: "500m"

@@ -8,7 +8,7 @@ from kubernetes.config.config_exception import ConfigException
 
 from app.config import Settings
 from app.services.demo_users import record_lab_launch, record_lab_stop, sync_session_activity
-from app.services.jupyter_snapshots import resolve_launch_image_for_identity
+from app.services.jupyter_snapshots import create_snapshot_publish_job, resolve_launch_image_for_identity
 from app.services.kube_client import get_core_v1_api
 from app.services.lab_identity import LabIdentity, build_lab_identity
 
@@ -93,6 +93,28 @@ fi
 mkdir -p "${{workspace_dir}}/.platform"
 printf '%s\\n' '{launch_image}' > "${{workspace_dir}}/.platform/launch-image"
 """.strip()
+
+
+def _snapshot_publish_fields(settings: Settings, username: str) -> dict[str, str | None]:
+    try:
+        snapshot = create_snapshot_publish_job(settings, username)
+        return {
+            "snapshot_status": str(snapshot.get("status") or ""),
+            "snapshot_job_name": str(snapshot.get("job_name") or "") or None,
+            "snapshot_detail": str(snapshot.get("detail") or ""),
+        }
+    except ValueError as exc:
+        return {
+            "snapshot_status": "skipped",
+            "snapshot_job_name": None,
+            "snapshot_detail": str(exc),
+        }
+    except RuntimeError as exc:
+        return {
+            "snapshot_status": "failed",
+            "snapshot_job_name": None,
+            "snapshot_detail": str(exc),
+        }
 
 
 def _session_summary(
@@ -331,6 +353,23 @@ def delete_lab_session(settings: Settings, username: str) -> dict[str, object]:
         summary["ready"] = False
         summary["detail"] = "Personal JupyterLab session resources were deleted."
         summary["node_port"] = None
+        summary.update(_snapshot_publish_fields(settings, identity.username))
+        snapshot_status = str(summary.get("snapshot_status") or "")
+        if snapshot_status in {"pending", "building"}:
+            summary["detail"] = (
+                "Personal JupyterLab session resources were deleted. "
+                "Harbor snapshot publish started."
+            )
+        elif snapshot_status == "ready":
+            summary["detail"] = (
+                "Personal JupyterLab session resources were deleted. "
+                "Latest Harbor snapshot is ready."
+            )
+        elif snapshot_status == "failed":
+            summary["detail"] = (
+                "Personal JupyterLab session resources were deleted. "
+                "Harbor snapshot publish failed."
+            )
         record_lab_stop(settings, identity.username)
         return summary
     except ConfigException as exc:

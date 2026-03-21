@@ -420,6 +420,35 @@ ssh_run() {
   ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "${command}"
 }
 
+sudo_wrap_command() {
+  local command="$1"
+  local escaped_pw
+  local escaped_command
+
+  escaped_command="$(escape_single_quotes "${command}")"
+  if [[ -n "${SSH_PASSWORD}" ]]; then
+    escaped_pw="$(escape_single_quotes "${SSH_PASSWORD}")"
+    printf "printf '%%s\\n' '%s' | sudo -S -p '' bash -lc '%s'" "${escaped_pw}" "${escaped_command}"
+    return 0
+  fi
+
+  printf "sudo bash -lc '%s'" "${escaped_command}"
+}
+
+ssh_capture_sudo() {
+  local host="$1"
+  local command="$2"
+
+  ssh_capture "${host}" "$(sudo_wrap_command "${command}")"
+}
+
+ssh_run_sudo() {
+  local host="$1"
+  local command="$2"
+
+  ssh_run "${host}" "$(sudo_wrap_command "${command}")"
+}
+
 wait_for_ssh() {
   local host="$1"
   local label="$2"
@@ -438,7 +467,7 @@ wait_for_ssh() {
 remote_kubectl() {
   local host="$1"
   shift
-  ssh_run "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl $*"
+  ssh_run_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl $*"
 }
 
 resolve_ingress_lb_ip() {
@@ -454,7 +483,7 @@ resolve_ingress_lb_ip() {
 
   for i in $(seq 1 "${attempts}"); do
     ip="$(
-      ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n ingress-nginx get svc ingress-nginx-controller -o custom-columns=IP:.status.loadBalancer.ingress[0].ip --no-headers 2>/dev/null | tr -d '[:space:]'" \
+      ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n ingress-nginx get svc ingress-nginx-controller -o custom-columns=IP:.status.loadBalancer.ingress[0].ip --no-headers 2>/dev/null | tr -d '[:space:]'" \
         || true
     )"
     if [[ -n "${ip}" && "${ip}" != "<none>" ]]; then
@@ -478,36 +507,36 @@ verify_solution_placement() {
   local airflow_node
   local frontend_nodes
 
-  backend_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=backend -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  backend_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=backend -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${backend_node}" ]] || die "backend pod node 확인 실패"
   [[ "${backend_node}" == "${WORKER1_NAME}" ]] || die "backend expected on ${WORKER1_NAME}, got ${backend_node}"
 
-  jupyter_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=jupyter -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  jupyter_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=jupyter -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${jupyter_node}" ]] || die "jupyter pod node 확인 실패"
   [[ "${jupyter_node}" == "${WORKER1_NAME}" ]] || die "jupyter expected on ${WORKER1_NAME}, got ${jupyter_node}"
 
-  gitlab_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=gitlab -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  gitlab_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=gitlab -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${gitlab_node}" ]] || die "gitlab pod node 확인 실패"
   [[ "${gitlab_node}" == "${WORKER2_NAME}" ]] || die "gitlab expected on ${WORKER2_NAME}, got ${gitlab_node}"
 
-  nexus_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=nexus -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  nexus_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=nexus -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${nexus_node}" ]] || die "nexus pod node 확인 실패"
   [[ "${nexus_node}" == "${WORKER2_NAME}" ]] || die "nexus expected on ${WORKER2_NAME}, got ${nexus_node}"
 
-  mongodb_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=mongodb -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  mongodb_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=mongodb -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${mongodb_node}" ]] || die "mongodb pod node 확인 실패"
   [[ "${mongodb_node}" == "${WORKER2_NAME}" ]] || die "mongodb expected on ${WORKER2_NAME}, got ${mongodb_node}"
 
-  redis_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=redis -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  redis_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=redis -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${redis_node}" ]] || die "redis pod node 확인 실패"
   [[ "${redis_node}" == "${WORKER2_NAME}" ]] || die "redis expected on ${WORKER2_NAME}, got ${redis_node}"
 
-  airflow_node="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=airflow -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
+  airflow_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=airflow -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   if [[ -n "${airflow_node}" ]]; then
     [[ "${airflow_node}" == "${WORKER2_NAME}" ]] || die "airflow expected on ${WORKER2_NAME}, got ${airflow_node}"
   fi
 
-  frontend_nodes="$(ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=frontend -o custom-columns=NODE:.spec.nodeName --no-headers | sed '/^$/d'")"
+  frontend_nodes="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=frontend -o custom-columns=NODE:.spec.nodeName --no-headers | sed '/^$/d'")"
   [[ -n "${frontend_nodes}" ]] || die "frontend pod node 확인 실패"
 
   if printf '%s\n' "${frontend_nodes}" | grep -Fxq "${CONTROL_PLANE_NAME}"; then
@@ -530,15 +559,15 @@ validate_cluster_state() {
   for deploy in backend jupyter frontend gitlab nexus redis; do
     remote_kubectl "${host}" "-n ${NAMESPACE} wait --for=condition=Available deployment/${deploy} --timeout=900s"
   done
-  if ssh_run "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get deployment airflow >/dev/null 2>&1"; then
+  if ssh_run_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get deployment airflow >/dev/null 2>&1"; then
     remote_kubectl "${host}" "-n ${NAMESPACE} wait --for=condition=Available deployment/airflow --timeout=900s"
   fi
-  if ssh_run "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get statefulset mongodb >/dev/null 2>&1"; then
+  if ssh_run_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get statefulset mongodb >/dev/null 2>&1"; then
     remote_kubectl "${host}" "-n ${NAMESPACE} wait --for=condition=Ready pod -l app=mongodb --timeout=900s"
   fi
 
   not_ready_pods="$(
-    ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods --no-headers | awk '\$3 != \"Running\" && \$3 != \"Completed\" { print \$1 \" \" \$3 }'" || true
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods --no-headers | awk '\$3 != \"Running\" && \$3 != \"Completed\" { print \$1 \" \" \$3 }'" || true
   )"
   if [[ -n "${not_ready_pods}" ]]; then
     printf '%s\n' "${not_ready_pods}"
@@ -546,7 +575,7 @@ validate_cluster_state() {
   fi
 
   unbound_pvc="$(
-    ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pvc --no-headers | awk '\$2 != \"Bound\" { print \$1 \" \" \$2 }'" || true
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pvc --no-headers | awk '\$2 != \"Bound\" { print \$1 \" \" \$2 }'" || true
   )"
   if [[ -n "${unbound_pvc}" ]]; then
     printf '%s\n' "${unbound_pvc}"
@@ -563,15 +592,47 @@ validate_cluster_state() {
 
 verify_http_endpoints() {
   local host="$1"
-  if [[ "${SETUP_INGRESS_STACK}" -eq 1 ]]; then
-    if ! RESOLVED_INGRESS_LB_IP="$(resolve_ingress_lb_ip "${host}")"; then
-      die "Unable to resolve ingress-nginx external IP."
+  local verify_supports_http_mode=0
+
+  local check_nodeport_http
+  check_nodeport_http() {
+    local name="$1"
+    local url="$2"
+    local accepted_codes="$3"
+    local code
+
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "${url}" || true)"
+    if printf '%s\n' "${accepted_codes}" | tr ',' '\n' | grep -Fxq "${code}"; then
+      log "HTTP check passed (${name}: ${url}, status=${code})"
+      return 0
     fi
-    log "Resolved ingress LB IP: ${RESOLVED_INGRESS_LB_IP}"
-    ssh_run "${host}" "sudo bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --http-mode ingress --lb-ip '${RESOLVED_INGRESS_LB_IP}'"
-  else
-    ssh_run "${host}" "sudo bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --http-mode nodeport --host '${host}'"
+    die "HTTP check failed (${name}: ${url}, status=${code}, expected=${accepted_codes})"
+  }
+
+  if ssh_run_sudo "${host}" "bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --help 2>/dev/null | grep -q -- '--http-mode'"; then
+    verify_supports_http_mode=1
   fi
+
+  if [[ "${verify_supports_http_mode}" -eq 0 ]]; then
+    warn "Remote verify.sh does not support --http-mode. Using legacy NodePort verification flags."
+    ssh_run_sudo "${host}" "bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --host '${host}' --skip-http"
+    check_nodeport_http "frontend" "http://${host}:30080" "200"
+    check_nodeport_http "backend" "http://${host}:30081/docs" "200"
+    check_nodeport_http "jupyter" "http://${host}:30088/lab" "200,302"
+    check_nodeport_http "gitlab" "http://${host}:30089/users/sign_in" "200,302"
+    check_nodeport_http "nexus" "http://${host}:30091" "200,302"
+    return 0
+  fi
+
+  if [[ "${SETUP_INGRESS_STACK}" -eq 1 ]]; then
+    if RESOLVED_INGRESS_LB_IP="$(resolve_ingress_lb_ip "${host}")"; then
+      log "Resolved ingress LB IP: ${RESOLVED_INGRESS_LB_IP}"
+      ssh_run_sudo "${host}" "bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --http-mode ingress --lb-ip '${RESOLVED_INGRESS_LB_IP}'"
+      return 0
+    fi
+    warn "Unable to resolve ingress-nginx external IP. Falling back to NodePort verification."
+  fi
+  ssh_run_sudo "${host}" "bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --http-mode nodeport --host '${host}'"
 }
 
 check_harbor_endpoint() {
@@ -604,18 +665,18 @@ seed_gitlab_be_fe_repositories() {
   escaped_repo_root="$(escape_single_quotes "${REMOTE_REPO_ROOT}")"
   escaped_demo_pw="$(escape_single_quotes "${GITLAB_DEMO_PASSWORD}")"
 
-  remote_cmd="sudo bash -lc 'set -euo pipefail; NS='\''${escaped_namespace}'\''; REPO='\''${escaped_repo_root}'\''; DEMO_PW='\''${escaped_demo_pw}'\''; ROOT_PW=\"\$(KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n \"\${NS}\" get secret platform-secrets -o jsonpath=\"{.data.GITLAB_ROOT_PASSWORD}\" | base64 -d)\"; cd \"\${REPO}\"; NAMESPACE=\"\${NS}\" GITLAB_URL=\"http://127.0.0.1:30089\" GITLAB_ROOT_PASSWORD=\"\${ROOT_PW}\" GITLAB_DEMO_PASSWORD=\"\${DEMO_PW}\" bash scripts/demo_gitlab_repo_flow.sh'"
+  remote_cmd="bash -lc 'set -euo pipefail; NS='\''${escaped_namespace}'\''; REPO='\''${escaped_repo_root}'\''; DEMO_PW='\''${escaped_demo_pw}'\''; ROOT_PW=\"\$(KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n \"\${NS}\" get secret platform-secrets -o jsonpath=\"{.data.GITLAB_ROOT_PASSWORD}\" | base64 -d)\"; cd \"\${REPO}\"; NAMESPACE=\"\${NS}\" GITLAB_URL=\"http://127.0.0.1:30089\" GITLAB_ROOT_PASSWORD=\"\${ROOT_PW}\" GITLAB_DEMO_PASSWORD=\"\${DEMO_PW}\" bash scripts/demo_gitlab_repo_flow.sh'"
 
-  ssh_run "${host}" "${remote_cmd}"
+  ssh_run_sudo "${host}" "${remote_cmd}"
 }
 
 verify_gitlab_clone_access() {
   local host="$1"
   local remote_cmd
 
-  remote_cmd="sudo bash -lc 'set -euo pipefail; tmp_dir=\"\$(mktemp -d)\"; trap '\''rm -rf \"\${tmp_dir}\"'\'' EXIT; git clone --depth 1 \"http://127.0.0.1:30089/dev1/platform-backend.git\" \"\${tmp_dir}/platform-backend\" >/dev/null; git clone --depth 1 \"http://127.0.0.1:30089/dev2/platform-frontend.git\" \"\${tmp_dir}/platform-frontend\" >/dev/null; test -f \"\${tmp_dir}/platform-backend/README.md\"; test -f \"\${tmp_dir}/platform-frontend/README.md\"'"
+  remote_cmd="bash -lc 'set -euo pipefail; tmp_dir=\"\$(mktemp -d)\"; trap '\''rm -rf \"\${tmp_dir}\"'\'' EXIT; git clone --depth 1 \"http://127.0.0.1:30089/dev1/platform-backend.git\" \"\${tmp_dir}/platform-backend\" >/dev/null; git clone --depth 1 \"http://127.0.0.1:30089/dev2/platform-frontend.git\" \"\${tmp_dir}/platform-frontend\" >/dev/null; test -f \"\${tmp_dir}/platform-backend/README.md\"; test -f \"\${tmp_dir}/platform-frontend/README.md\"'"
 
-  ssh_run "${host}" "${remote_cmd}"
+  ssh_run_sudo "${host}" "${remote_cmd}"
 }
 
 run_post_reboot_check() {
@@ -1096,7 +1157,7 @@ fi
 if [[ "${SKIP_NEXUS_PRIME}" -eq 0 ]]; then
   STEP_INDEX=$(( STEP_INDEX + 1 ))
   log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Prime Nexus offline repositories"
-  ssh_run "${CONTROL_PLANE_SSH_HOST}" "sudo bash '${REMOTE_REPO_ROOT}/scripts/setup_nexus_offline.sh' --namespace '${NAMESPACE}' --nexus-url '${NEXUS_URL}' --current-password '${NEXUS_CURRENT_PASSWORD}' --target-password '${NEXUS_TARGET_PASSWORD}' --username '${NEXUS_USERNAME}' --password '${NEXUS_PASSWORD}' --python-seed-file '${PYTHON_SEED_FILE_REMOTE}' --npm-seed-file '${NPM_SEED_FILE_REMOTE}'"
+  ssh_run_sudo "${CONTROL_PLANE_SSH_HOST}" "bash '${REMOTE_REPO_ROOT}/scripts/setup_nexus_offline.sh' --namespace '${NAMESPACE}' --nexus-url '${NEXUS_URL}' --current-password '${NEXUS_CURRENT_PASSWORD}' --target-password '${NEXUS_TARGET_PASSWORD}' --username '${NEXUS_USERNAME}' --password '${NEXUS_PASSWORD}' --python-seed-file '${PYTHON_SEED_FILE_REMOTE}' --npm-seed-file '${NPM_SEED_FILE_REMOTE}'"
 fi
 
 if [[ "${POST_REBOOT_CHECK}" -eq 1 ]]; then

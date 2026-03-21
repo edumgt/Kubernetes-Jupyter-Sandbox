@@ -63,6 +63,9 @@ class LabSessionResponse(BaseModel):
     token: str
     node_port: int | None = None
     created_at: str | None = None
+    snapshot_status: str | None = None
+    snapshot_job_name: str | None = None
+    snapshot_detail: str | None = None
 
 
 class SnapshotStatusResponse(BaseModel):

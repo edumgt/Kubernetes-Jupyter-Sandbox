@@ -269,6 +269,9 @@
                 <div v-if="labSession.workspace_subpath">Workspace: {{ labSession.workspace_subpath }}</div>
                 <div v-if="labSession.node_port">NodePort: {{ labSession.node_port }}</div>
                 <div v-if="labSession.image" class="lab-url">Image: {{ labSession.image }}</div>
+                <div v-if="labSession.snapshot_status">Snapshot Publish: {{ labSession.snapshot_status }}</div>
+                <div v-if="labSession.snapshot_job_name">Snapshot Job: {{ labSession.snapshot_job_name }}</div>
+                <div v-if="labSession.snapshot_detail">Snapshot Detail: {{ labSession.snapshot_detail }}</div>
                 <div v-if="labLaunchUrl" class="lab-url">{{ labLaunchUrl }}</div>
               </q-banner>
             </q-card-section>
@@ -955,6 +958,9 @@ function emptyLabSession() {
     token: "",
     node_port: null,
     created_at: null,
+    snapshot_status: "",
+    snapshot_job_name: "",
+    snapshot_detail: "",
   };
 }
 
@@ -1049,6 +1055,12 @@ async function parseJson(response) {
     throw new Error(message);
   }
   return response.json();
+}
+
+function waitForDelay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function formatDuration(totalSeconds) {
@@ -1258,6 +1270,14 @@ async function loginApp() {
     if (payload.user.role === "user") {
       await refreshLabSession({ silent: true, skipSnapshotRefresh: true });
       await refreshSnapshotStatus({ silent: true });
+      if (snapshotState.value.status === "building" || snapshotState.value.status === "pending") {
+        void waitForSnapshotCompletion({
+          notifyWaiting: false,
+          notifyFailure: false,
+          notifyTimeout: false,
+          timeoutMs: 180000,
+        });
+      }
       await loadUserUsage({ silent: true });
     } else if (payload.user.role === "admin") {
       await loadAdminOverview({ silent: true });
@@ -1398,6 +1418,71 @@ async function refreshLabSession(options = {}) {
   }
 }
 
+async function waitForSnapshotCompletion(options = {}) {
+  if (!isUser.value || !managedUsername.value) {
+    return;
+  }
+
+  const timeoutMs = Number(options.timeoutMs ?? 120000);
+  const pollIntervalMs = Number(options.pollIntervalMs ?? 2000);
+  const notifyWaiting = options.notifyWaiting !== false;
+  const notifyFailure = options.notifyFailure !== false;
+  const notifyTimeout = options.notifyTimeout !== false;
+  const deadline = Date.now() + timeoutMs;
+  let announcedWaiting = false;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/jupyter/snapshots/${encodeURIComponent(managedUsername.value)}`,
+        {
+          headers: authHeaders(),
+        },
+      );
+      const payload = await parseJson(response);
+      snapshotState.value = {
+        ...emptySnapshotState(),
+        ...payload,
+      };
+
+      if (payload.status === "building" || payload.status === "pending") {
+        if (notifyWaiting && !announcedWaiting) {
+          Notify.create({
+            type: "info",
+            message: "Waiting for your latest Harbor snapshot publish before starting Jupyter.",
+          });
+          announcedWaiting = true;
+        }
+        await waitForDelay(pollIntervalMs);
+        continue;
+      }
+
+      if (payload.status === "failed" && notifyFailure) {
+        Notify.create({
+          type: "warning",
+          message: "Latest Harbor snapshot publish failed. Starting with the last restorable image.",
+        });
+      }
+      return;
+    } catch (error) {
+      if (notifyFailure) {
+        Notify.create({
+          type: "warning",
+          message: `Snapshot status check failed: ${error.message}`,
+        });
+      }
+      return;
+    }
+  }
+
+  if (notifyTimeout) {
+    Notify.create({
+      type: "warning",
+      message: "Snapshot publish is still running. Starting your sandbox now.",
+    });
+  }
+}
+
 async function startLabSession() {
   if (!isUser.value || !managedUsername.value || sessionLoading.value) {
     return;
@@ -1405,6 +1490,7 @@ async function startLabSession() {
 
   sessionLoading.value = true;
   try {
+    await waitForSnapshotCompletion();
     const response = await fetch(`${apiBaseUrl}/api/jupyter/sessions`, {
       method: "POST",
       headers: authHeaders({
@@ -1463,10 +1549,26 @@ async function stopLabSession() {
     };
     stopLabPolling();
     void refreshSnapshotStatus({ silent: true });
+    if (payload.snapshot_status === "building" || payload.snapshot_status === "pending") {
+      void waitForSnapshotCompletion({
+        notifyWaiting: false,
+        notifyFailure: false,
+        notifyTimeout: false,
+        timeoutMs: 180000,
+      });
+    }
     void loadUserUsage({ silent: true });
+    let stopMessage = "Your Jupyter sandbox resources were deleted.";
+    if (payload.snapshot_status === "building" || payload.snapshot_status === "pending") {
+      stopMessage += " Harbor snapshot publish started.";
+    } else if (payload.snapshot_status === "ready") {
+      stopMessage += " Latest Harbor snapshot is ready.";
+    } else if (payload.snapshot_status === "failed") {
+      stopMessage += " Harbor snapshot publish failed.";
+    }
     Notify.create({
       type: "warning",
-      message: "Your Jupyter sandbox resources were deleted.",
+      message: stopMessage,
     });
   } catch (error) {
     Notify.create({
@@ -1634,6 +1736,14 @@ onMounted(async () => {
   if (isUser.value) {
     await refreshLabSession({ silent: true, skipSnapshotRefresh: true });
     await refreshSnapshotStatus({ silent: true });
+    if (snapshotState.value.status === "building" || snapshotState.value.status === "pending") {
+      void waitForSnapshotCompletion({
+        notifyWaiting: false,
+        notifyFailure: false,
+        notifyTimeout: false,
+        timeoutMs: 180000,
+      });
+    }
     await loadUserUsage({ silent: true });
   }
 

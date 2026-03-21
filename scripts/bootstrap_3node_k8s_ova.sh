@@ -148,6 +148,10 @@ if [[ -n "${SSH_PASSWORD}" ]]; then
   require_command sshpass
 fi
 
+escape_single_quotes() {
+  printf "%s" "$1" | sed "s/'/'\"'\"'/g"
+}
+
 ssh_run() {
   local host="$1"
   shift
@@ -171,6 +175,22 @@ scp_copy() {
   fi
 
   scp "${SCP_OPTS[@]}" "${src}" "${SSH_USER}@${host}:${dst}"
+}
+
+ssh_run_sudo() {
+  local host="$1"
+  local command="$2"
+  local escaped_pw
+  local escaped_command
+
+  escaped_command="$(escape_single_quotes "${command}")"
+  if [[ -n "${SSH_PASSWORD}" ]]; then
+    escaped_pw="$(escape_single_quotes "${SSH_PASSWORD}")"
+    ssh_run "${host}" "printf '%s\n' '${escaped_pw}' | sudo -S -p '' bash -lc '${escaped_command}'"
+    return
+  fi
+
+  ssh_run "${host}" "sudo bash -lc '${escaped_command}'"
 }
 
 wait_for_ssh() {
@@ -216,7 +236,7 @@ configure_node_network() {
   local target_hostname="$3"
 
   log "Configuring static IP/hostname on ${target_hostname} via ${bootstrap_host}"
-  if ! ssh_run "${bootstrap_host}" "sudo bash -s -- '$target_hostname' '$final_ip' '$NETWORK_CIDR_PREFIX' '$GATEWAY' '$DNS_SERVERS' '$NET_INTERFACE' '$HOSTS_B64'" <<'REMOTE_NET'; then
+  if ! ssh_run_sudo "${bootstrap_host}" "bash -s -- '$target_hostname' '$final_ip' '$NETWORK_CIDR_PREFIX' '$GATEWAY' '$DNS_SERVERS' '$NET_INTERFACE' '$HOSTS_B64'" <<'REMOTE_NET'; then
 set -euo pipefail
 
 TARGET_HOSTNAME="$1"
@@ -301,7 +321,40 @@ join_worker_node() {
 
   log "Joining ${worker_hostname} to control-plane"
   prepare_remote_join_script "${worker_ip}"
-  ssh_run "${worker_ip}" "sudo /tmp/join_worker_node.sh --hostname '${worker_hostname}' --join-command-b64 '${join_command_b64}'"
+  ssh_run_sudo "${worker_ip}" "/tmp/join_worker_node.sh --hostname '${worker_hostname}' --join-command-b64 '${join_command_b64}'"
+}
+
+node_exists_on_control_plane() {
+  local node_name="$1"
+  ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl get node '${node_name}' >/dev/null 2>&1"
+}
+
+node_ready_on_control_plane() {
+  local node_name="$1"
+  local ready_status
+
+  ready_status="$(
+    ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl get node '${node_name}' -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'" \
+      2>/dev/null || true
+  )"
+  [[ "${ready_status}" == "True" ]]
+}
+
+ensure_worker_joined() {
+  local worker_ip="$1"
+  local worker_hostname="$2"
+  local join_command_b64="$3"
+
+  if node_exists_on_control_plane "${worker_hostname}"; then
+    if node_ready_on_control_plane "${worker_hostname}"; then
+      log "Node ${worker_hostname} is already Ready; skipping kubeadm join"
+      return 0
+    fi
+    log "Node ${worker_hostname} exists but is not Ready; deleting stale node object before rejoin"
+    ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl delete node '${worker_hostname}' --ignore-not-found"
+  fi
+
+  join_worker_node "${worker_ip}" "${worker_hostname}" "${join_command_b64}"
 }
 
 log "Checking SSH connectivity"
@@ -317,41 +370,42 @@ fi
 
 if ! is_true "${SKIP_JOIN}"; then
   log "Generating kubeadm join command from control-plane"
-  JOIN_COMMAND="$(ssh_run "${CONTROL_PLANE_IP}" "sudo kubeadm token create --ttl '${TOKEN_TTL}' --print-join-command" | tr -d '\r' | tail -n 1)"
+  JOIN_COMMAND="$(ssh_run_sudo "${CONTROL_PLANE_IP}" "kubeadm token create --ttl '${TOKEN_TTL}' --print-join-command" | tr -d '\r' | tail -n 1)"
   [[ -n "${JOIN_COMMAND}" ]] || die "Failed to generate kubeadm join command."
   JOIN_COMMAND_B64="$(printf '%s' "${JOIN_COMMAND}" | base64 -w 0)"
 
-  join_worker_node "${WORKER1_IP}" "${WORKER1_HOSTNAME}" "${JOIN_COMMAND_B64}"
-  join_worker_node "${WORKER2_IP}" "${WORKER2_HOSTNAME}" "${JOIN_COMMAND_B64}"
+  ensure_worker_joined "${WORKER1_IP}" "${WORKER1_HOSTNAME}" "${JOIN_COMMAND_B64}"
+  ensure_worker_joined "${WORKER2_IP}" "${WORKER2_HOSTNAME}" "${JOIN_COMMAND_B64}"
 
   log "Waiting for worker nodes to become Ready"
-  ssh_run "${CONTROL_PLANE_IP}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER1_HOSTNAME} --timeout=420s"
-  ssh_run "${CONTROL_PLANE_IP}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER2_HOSTNAME} --timeout=420s"
+  ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER1_HOSTNAME} --timeout=420s"
+  ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER2_HOSTNAME} --timeout=420s"
 fi
 
 if is_true "${APPLY_OVERLAY}"; then
   log "Applying 3-node overlay (${OVERLAY})"
-  ssh_run "${CONTROL_PLANE_IP}" "if [[ -f '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' ]]; then sudo bash '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' --env '${ENVIRONMENT}' --overlay '${OVERLAY}' --workers '${WORKER1_HOSTNAME},${WORKER2_HOSTNAME}'; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' >&2; exit 1; fi"
+  ssh_run_sudo "${CONTROL_PLANE_IP}" "if [[ -f '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' ]]; then bash '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' --env '${ENVIRONMENT}' --overlay '${OVERLAY}' --workers '${WORKER1_HOSTNAME},${WORKER2_HOSTNAME}'; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' >&2; exit 1; fi"
 fi
 
 if is_true "${SETUP_INGRESS_STACK}"; then
   default_ingress_values
   log "Configuring ingress-nginx + MetalLB (range=${METALLB_ADDRESS_RANGE}, lb_ip=${INGRESS_LB_IP})"
-
-  REMOTE_INGRESS_CMD="if [[ -f '${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' ]]; then sudo bash '${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' --metallb-range '${METALLB_ADDRESS_RANGE}' --ingress-lb-ip '${INGRESS_LB_IP}'"
-  if [[ -n "${METALLB_MANIFEST}" ]]; then
-    REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD} --metallb-manifest '${METALLB_MANIFEST}'"
+  if ssh_run_sudo "${CONTROL_PLANE_IP}" "test -f '${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh'"; then
+    REMOTE_INGRESS_CMD="bash '${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' --metallb-range '${METALLB_ADDRESS_RANGE}' --ingress-lb-ip '${INGRESS_LB_IP}'"
+    if [[ -n "${METALLB_MANIFEST}" ]]; then
+      REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD} --metallb-manifest '${METALLB_MANIFEST}'"
+    fi
+    if [[ -n "${INGRESS_MANIFEST}" ]]; then
+      REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD} --ingress-manifest '${INGRESS_MANIFEST}'"
+    fi
+    ssh_run_sudo "${CONTROL_PLANE_IP}" "${REMOTE_INGRESS_CMD}"
+  else
+    log "Ingress setup script is missing on control-plane (${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh); skipping ingress/metallb setup."
   fi
-  if [[ -n "${INGRESS_MANIFEST}" ]]; then
-    REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD} --ingress-manifest '${INGRESS_MANIFEST}'"
-  fi
-  REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD}; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' >&2; exit 1; fi"
-
-  ssh_run "${CONTROL_PLANE_IP}" "${REMOTE_INGRESS_CMD}"
 fi
 
 log "Final node status"
-ssh_run "${CONTROL_PLANE_IP}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide"
+ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide"
 
 log "3-node bootstrap completed."
 if is_true "${SETUP_INGRESS_STACK}"; then

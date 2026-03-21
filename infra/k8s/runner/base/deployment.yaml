@@ -20,11 +20,12 @@ spec:
           command:
             - gitlab-runner
             - run
+            - --config=/etc/gitlab-runner/config.toml
             - --working-directory=/home/gitlab-runner
             - --user=gitlab-runner
           volumeMounts:
             - name: runner-config
-              mountPath: /home/gitlab-runner/.gitlab-runner/config.toml
+              mountPath: /etc/gitlab-runner/config.toml
               subPath: config.toml
       volumes:
         - name: runner-config
