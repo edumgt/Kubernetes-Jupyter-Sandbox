@@ -278,6 +278,37 @@ ssh_run() {
   ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "${command}"
 }
 
+build_remote_sudo_bash_cmd() {
+  local command="$1"
+  local command_escaped
+  local password_escaped
+
+  command_escaped="$(printf '%q' "${command}")"
+  if [[ -n "${SSH_PASSWORD}" ]]; then
+    password_escaped="$(printf '%q' "${SSH_PASSWORD}")"
+    printf "printf '%%s\\n' %s | sudo -S -p '' bash -lc %s" "${password_escaped}" "${command_escaped}"
+    return 0
+  fi
+
+  printf "sudo bash -lc %s" "${command_escaped}"
+}
+
+ssh_run_sudo() {
+  local host="$1"
+  shift
+  local command="$*"
+
+  ssh_run "${host}" "$(build_remote_sudo_bash_cmd "${command}")"
+}
+
+ssh_capture_sudo() {
+  local host="$1"
+  shift
+  local command="$*"
+
+  ssh_capture "${host}" "$(build_remote_sudo_bash_cmd "${command}")"
+}
+
 wait_for_ssh() {
   local host="$1"
   local label="$2"
@@ -296,7 +327,7 @@ wait_for_ssh() {
 remote_kubectl() {
   local host="$1"
   shift
-  ssh_run "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl $*"
+  ssh_run_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl $*"
 }
 
 resolve_ingress_lb_ip() {
@@ -312,7 +343,7 @@ resolve_ingress_lb_ip() {
 
   for i in $(seq 1 "${attempts}"); do
     ip="$(
-      ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n ingress-nginx get svc ingress-nginx-controller -o custom-columns=IP:.status.loadBalancer.ingress[0].ip --no-headers 2>/dev/null | tr -d '[:space:]'" \
+      ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n ingress-nginx get svc ingress-nginx-controller -o custom-columns=IP:.status.loadBalancer.ingress[0].ip --no-headers 2>/dev/null | tr -d '[:space:]'" \
         || true
     )"
     if [[ -n "${ip}" && "${ip}" != "<none>" ]]; then
@@ -335,7 +366,7 @@ validate_cluster_state() {
   remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER2_NAME} --timeout=420s"
 
   not_ready_pods="$(
-    ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods --no-headers | awk '\$3 != \"Running\" && \$3 != \"Completed\" { print \$1 \" \" \$3 }'" || true
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods --no-headers | awk '\$3 != \"Running\" && \$3 != \"Completed\" { print \$1 \" \" \$3 }'" || true
   )"
   if [[ -n "${not_ready_pods}" ]]; then
     printf '%s\n' "${not_ready_pods}"
@@ -343,7 +374,7 @@ validate_cluster_state() {
   fi
 
   unbound_pvc="$(
-    ssh_capture "${host}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pvc --no-headers | awk '\$2 != \"Bound\" { print \$1 \" \" \$2 }'" || true
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pvc --no-headers | awk '\$2 != \"Bound\" { print \$1 \" \" \$2 }'" || true
   )"
   if [[ -n "${unbound_pvc}" ]]; then
     printf '%s\n' "${unbound_pvc}"
@@ -362,7 +393,7 @@ verify_http_endpoints() {
     die "Unable to resolve ingress-nginx external IP. Use --ingress-lb-ip."
   fi
   log "Resolved ingress LB IP: ${RESOLVED_INGRESS_LB_IP}"
-  ssh_run "${host}" "sudo bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --http-mode ingress --lb-ip '${RESOLVED_INGRESS_LB_IP}'"
+  ssh_run_sudo "${host}" "bash '${REMOTE_REPO_ROOT}/scripts/verify.sh' --env '${ENVIRONMENT}' --http-mode ingress --lb-ip '${RESOLVED_INGRESS_LB_IP}'"
 }
 
 check_harbor_endpoint() {
@@ -388,8 +419,8 @@ verify_gitlab_clone_access() {
   local host="$1"
   local remote_cmd
 
-  remote_cmd="sudo bash -lc 'set -euo pipefail; tmp_dir=\"\$(mktemp -d)\"; trap '\''rm -rf \"\${tmp_dir}\"'\'' EXIT; git clone --depth 1 \"${GITLAB_INTERNAL_URL}/dev1/platform-backend.git\" \"\${tmp_dir}/platform-backend\" >/dev/null; git clone --depth 1 \"${GITLAB_INTERNAL_URL}/dev2/platform-frontend.git\" \"\${tmp_dir}/platform-frontend\" >/dev/null; test -f \"\${tmp_dir}/platform-backend/README.md\"; test -f \"\${tmp_dir}/platform-frontend/README.md\"'"
-  ssh_run "${host}" "${remote_cmd}"
+  remote_cmd="set -euo pipefail; tmp_dir=\"\$(mktemp -d)\"; trap 'rm -rf \"\${tmp_dir}\"' EXIT; git clone --depth 1 \"${GITLAB_INTERNAL_URL}/dev1/platform-backend.git\" \"\${tmp_dir}/platform-backend\" >/dev/null; git clone --depth 1 \"${GITLAB_INTERNAL_URL}/dev2/platform-frontend.git\" \"\${tmp_dir}/platform-frontend\" >/dev/null; test -f \"\${tmp_dir}/platform-backend/README.md\"; test -f \"\${tmp_dir}/platform-frontend/README.md\""
+  ssh_run_sudo "${host}" "${remote_cmd}"
 }
 
 while [[ $# -gt 0 ]]; do
