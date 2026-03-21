@@ -27,10 +27,34 @@
     port: '6443'
     proto: tcp
 
+- name: Allow HTTP for ingress
+  community.general.ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+
+- name: Allow HTTPS for ingress
+  community.general.ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+
 - name: Allow Flannel VXLAN
   community.general.ufw:
     rule: allow
     port: '8472'
+    proto: udp
+
+- name: Allow MetalLB memberlist TCP
+  community.general.ufw:
+    rule: allow
+    port: '7946'
+    proto: tcp
+
+- name: Allow MetalLB memberlist UDP
+  community.general.ufw:
+    rule: allow
+    port: '7946'
     proto: udp
 
 - name: Allow frontend NodePort

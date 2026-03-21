@@ -138,7 +138,7 @@ kaniko_build:
     entrypoint: [""]
   script:
     - export IMAGE_NAME="docker.io/${DOCKERHUB_NAMESPACE:-edumgt}/k8s-data-platform-frontend"
-    - export VITE_API_BASE_URL="${VITE_API_BASE_URL:-http://localhost:30081}"
+    - export VITE_API_BASE_URL="${VITE_API_BASE_URL:-http://platform.local}"
     - mkdir -p /kaniko/.docker
     - >
       printf '{"auths":{"https://index.docker.io/v1/":{"username":"%s","password":"%s"}}}'

@@ -22,6 +22,49 @@ cd Kubernetes-Jupyter-Sandbox
 
 ## 3) VMware 기반 빌드/검증/export 순서
 
+### 3-0) 원샷 오케스트레이터(start.sh, 권장)
+
+루트 `start.sh`는 아래 단계들을 순차 실행합니다.
+
+- `scripts/vmware_provision_3node.sh` (3-node 재구성 + join + overlay + ingress/metallb)
+- 노드/파드/PVC/노드 배치 점검
+- `scripts/verify.sh`(Ingress URL 점검)
+- `scripts/setup_nexus_offline.sh`(선택)
+
+```bash
+bash ./start.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl
+```
+
+기본 동작은 기존 VMX 3개가 있으면 VM 삭제/packer 빌드를 건너뛰고, VM 기동 후 Pod/URL 검증 위주로 진행합니다.
+
+최종 OVA export는 루트 `ovabuild.sh`를 사용합니다.
+
+```bash
+bash ./ovabuild.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --control-plane-ip 192.168.56.10 \
+  --ingress-lb-ip 192.168.56.240 \
+  --dist-dir C:/ffmpeg
+```
+
+재부팅 복원 점검 + GitLab BE/FE demo repo seed 포함:
+
+```bash
+bash ./start.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --seed-gitlab-be-fe \
+  --post-reboot-check
+```
+
+PC 재기동 후 VMware에서 각 VM을 수동으로 Power On 했다면, 재빌드 없이 상태만 점검:
+
+```bash
+bash scripts/vmware_post_reboot_verify.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --control-plane-ip 192.168.56.10 \
+  --ingress-lb-ip 192.168.56.240
+```
+
 ### 3-1) VMware 변수 준비
 
 `packer/variables.vmware.auto.pkrvars.hcl`에서 아래 항목을 환경에 맞게 수정합니다.
@@ -76,10 +119,22 @@ bash scripts/build_vmware_ova_and_verify.sh --vars-file packer/variables.vmware.
 ### 3-7) 원샷 3-node 자동 구성 (control-plane + worker-1 + worker-2)
 
 아래 명령은 control-plane 1대 빌드 후 worker 2대를 clone 하고,
-3대 부팅 + join + overlay 적용까지 자동 수행합니다.
+3대 부팅 + join + overlay + ingress-nginx/MetalLB 적용까지 자동 수행합니다.
+기본값으로 VMX를 VMware Workstation UI에 등록하므로, 실행 후 `My Computer` 목록에서 3대 VM을 확인할 수 있습니다.
 
 ```bash
 bash scripts/vmware_provision_3node.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl
+```
+
+이미 control-plane VM이 있고 worker 2대만 다시 만들려면:
+
+```bash
+bash scripts/vmware_provision_3node.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --skip-build \
+  --force-recreate-workers \
+  --skip-bootstrap \
+  --vm-start-mode gui
 ```
 
 기존 worker clone을 버리고 다시 만들려면:
@@ -98,6 +153,20 @@ bash scripts/vmware_provision_3node.sh \
   --worker1-ip 192.168.56.11 \
   --worker2-ip 192.168.56.12 \
   --gateway 192.168.56.1
+```
+
+MetalLB 주소 대역을 직접 고정하려면:
+
+```bash
+bash scripts/vmware_provision_3node.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --static-network \
+  --control-plane-ip 192.168.56.10 \
+  --worker1-ip 192.168.56.11 \
+  --worker2-ip 192.168.56.12 \
+  --gateway 192.168.56.1 \
+  --metallb-range 192.168.56.240-192.168.56.250 \
+  --ingress-lb-ip 192.168.56.240
 ```
 
 ### 3-8) 3대 VM OVA 일괄 export
@@ -130,22 +199,56 @@ sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n data-platform-dev
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get svc -n data-platform-dev
 ```
 
-## 6) 호스트 브라우저 접속
+## 6) 호스트 브라우저 접속 (Ingress URL)
 
-`<OVA_IP>`는 `hostname -I`로 확인한 VM IP입니다.
+`vmware_provision_3node.sh`가 완료되면 ingress LoadBalancer IP(예: `192.168.56.240`)가 출력됩니다.
+호스트 OS의 `hosts` 파일에 아래 예시처럼 등록한 뒤 URL로 접속합니다.
 
-- Frontend: `http://<OVA_IP>:30080`
-- Backend: `http://<OVA_IP>:30081`
-- Jupyter: `http://<OVA_IP>:30088`
-- GitLab: `http://<OVA_IP>:30089`
-- Airflow: `http://<OVA_IP>:30090`
-- Nexus: `http://<OVA_IP>:30091`
-- code-server: `http://<OVA_IP>:30100`
+Windows `C:\\Windows\\System32\\drivers\\etc\\hosts` 예시:
+
+```text
+192.168.56.240 platform.local
+192.168.56.240 jupyter.platform.local
+192.168.56.240 gitlab.platform.local
+192.168.56.240 airflow.platform.local
+192.168.56.240 nexus.platform.local
+```
+
+- Frontend: `http://platform.local`
+- Backend docs: `http://platform.local/docs`
+- Jupyter: `http://jupyter.platform.local/lab`
+- GitLab: `http://gitlab.platform.local`
+- Airflow: `http://airflow.platform.local`
+- Nexus: `http://nexus.platform.local`
+
+레거시 NodePort 점검이 필요하면:
+- `bash scripts/verify.sh --http-mode nodeport --host <CONTROL_PLANE_IP>`
+- `bash scripts/verify.sh --http-mode ingress --lb-ip <INGRESS_LB_IP>`
 
 로그인 계정:
 - user: `test1@test.com / 123456`
 - user: `test2@test.com / 123456`
 - admin: `admin@test.com / 123456`
+
+## 6-1) 폐쇄망 개발용 Nexus 캐시 사전 워밍
+
+Python(Backend/Jupyter) + Vue3/Quasar(npm) 개발 라이브러리를 Nexus에 미리 적재하려면:
+
+```bash
+bash scripts/setup_nexus_offline.sh \
+  --namespace data-platform-dev \
+  --nexus-url http://nexus.platform.local \
+  --username admin \
+  --password '<nexus-password>' \
+  --python-seed-file scripts/offline/python-dev-seed.txt \
+  --npm-seed-file scripts/offline/npm-dev-seed.txt
+```
+
+control-plane VM 내부에서 실행할 때는 아래 URL도 사용 가능합니다.
+
+```bash
+--nexus-url http://127.0.0.1:30091
+```
 
 ## 7) 자주 발생하는 이슈
 
@@ -210,7 +313,7 @@ sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n data-platform-dev
 
 ### `ip -br a`에서 `ens32`가 `DOWN`으로 나오는 경우
 
-- 이 상태에서는 VM이 네트워크를 못 잡아서 `hostname -I`가 비거나, 호스트에서 NodePort 접근이 모두 실패합니다.
+- 이 상태에서는 VM이 네트워크를 못 잡아서 `hostname -I`가 비거나, 호스트에서 Ingress URL/NodePort 접근이 모두 실패합니다.
 - 먼저 VMware VM 설정에서 아래 항목을 확인합니다.
   - `Network Adapter > Connected` 체크
   - `Network Adapter > Connect at power on` 체크
@@ -272,7 +375,7 @@ sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes
 ### 화면은 열리는데 API 호출이 실패하는 경우
 
 - 브라우저 URL과 API 포트 접근 방식을 통일합니다.
-- VMware에서는 일반적으로 `http://<OVA_IP>:30080` 접근을 권장합니다.
+- VMware 3-node 구성에서는 `hosts` 등록 후 `http://platform.local` 접근을 권장합니다.
 
 ## 8) 멀티노드 관련 참고
 

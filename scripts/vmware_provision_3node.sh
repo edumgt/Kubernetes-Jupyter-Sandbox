@@ -11,6 +11,7 @@ WORKER2_NAME="${WORKER2_NAME:-k8s-worker-2}"
 
 POWERSHELL_BIN="${POWERSHELL_BIN:-powershell.exe}"
 VMRUN_WIN="${VMRUN_WIN:-C:/Program Files (x86)/VMware/VMware Workstation/vmrun.exe}"
+VMWARE_EXE_WIN="${VMWARE_EXE_WIN:-}"
 
 SKIP_BUILD=0
 FORCE_BUILD=0
@@ -18,6 +19,8 @@ FORCE_RECREATE_WORKERS=0
 SKIP_BOOTSTRAP=0
 STATIC_NETWORK=0
 APPLY_OVERLAY=1
+REGISTER_IN_WORKSTATION=1
+VM_START_MODE="${VM_START_MODE:-nogui}"
 
 CONTROL_PLANE_IP=""
 WORKER1_IP=""
@@ -36,6 +39,11 @@ TOKEN_TTL="${TOKEN_TTL:-2h}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 OVERLAY="${OVERLAY:-dev-3node}"
 REMOTE_REPO_ROOT="${REMOTE_REPO_ROOT:-/opt/k8s-data-platform}"
+SETUP_INGRESS_STACK="${SETUP_INGRESS_STACK:-1}"
+METALLB_ADDRESS_RANGE="${METALLB_ADDRESS_RANGE:-}"
+INGRESS_LB_IP="${INGRESS_LB_IP:-}"
+METALLB_MANIFEST="${METALLB_MANIFEST:-}"
+INGRESS_MANIFEST="${INGRESS_MANIFEST:-}"
 
 WAIT_IP_TIMEOUT_SEC="${WAIT_IP_TIMEOUT_SEC:-600}"
 RUNTIME_DIR=""
@@ -57,7 +65,7 @@ One-shot VMware 3-node flow:
   1) Build control-plane VM with Packer (vmware-iso)
   2) Clone worker-1 / worker-2 from control-plane VMX
   3) Start all 3 VMs
-  4) Auto-run bootstrap_3node_k8s_ova.sh (join + overlay)
+  4) Auto-run bootstrap_3node_k8s_ova.sh (join + overlay + ingress/metallb)
 
 Options:
   --vars-file PATH          Packer var file (default: packer/variables.vmware.auto.pkrvars.hcl)
@@ -65,7 +73,11 @@ Options:
   --worker1-name NAME       Worker-1 VM/hostname (default: k8s-worker-1)
   --worker2-name NAME       Worker-2 VM/hostname (default: k8s-worker-2)
   --vmrun PATH              Windows path to vmrun.exe
+  --vmware-exe PATH         Windows path to vmware.exe (auto-detect when empty)
   --powershell-bin CMD      PowerShell command (default: powershell.exe)
+  --vm-start-mode MODE      vmrun start mode: gui|nogui (default: nogui)
+  --skip-workstation-register
+                            Skip opening VMX files in VMware UI (inventory registration)
 
   --skip-build              Skip control-plane Packer build and reuse existing VMX
   --force-build             Pass --force to vmware_build_vm.sh (includes output_directory cleanup)
@@ -90,6 +102,11 @@ Options:
   --env dev|prod            Overlay environment (default: dev)
   --overlay NAME            Overlay name (default: dev-3node)
   --remote-repo-root PATH   Remote repo root (default: /opt/k8s-data-platform)
+  --skip-ingress-setup      Skip ingress-nginx + MetalLB setup after overlay apply
+  --metallb-range RANGE     MetalLB address range, e.g. 192.168.56.240-192.168.56.250
+  --ingress-lb-ip IP        Fixed ingress LoadBalancer IP inside the MetalLB range
+  --metallb-manifest REF    MetalLB manifest URL/path override (advanced)
+  --ingress-manifest REF    ingress-nginx manifest URL/path override (advanced)
   --wait-ip-timeout-sec N   Timeout per VM IP wait (default: 600)
   -h, --help                Show this help
 
@@ -184,14 +201,15 @@ ps_capture() {
 
   tmp_out="$(mktemp)"
   tmp_err="$(mktemp)"
-  trap 'rm -f "${tmp_out}" "${tmp_err}"' RETURN
 
   if "${POWERSHELL_BIN}" -NoProfile -Command "${command}" >"${tmp_out}" 2>"${tmp_err}"; then
     cat "${tmp_out}" | tr -d '\r'
+    rm -f "${tmp_out}" "${tmp_err}"
     return 0
   fi
   cat "${tmp_err}" >&2 || true
   cat "${tmp_out}" >&2 || true
+  rm -f "${tmp_out}" "${tmp_err}"
   return 1
 }
 
@@ -202,14 +220,15 @@ ps_run() {
 
   tmp_out="$(mktemp)"
   tmp_err="$(mktemp)"
-  trap 'rm -f "${tmp_out}" "${tmp_err}"' RETURN
 
   if "${POWERSHELL_BIN}" -NoProfile -Command "${command}" >"${tmp_out}" 2>"${tmp_err}"; then
     cat "${tmp_out}"
+    rm -f "${tmp_out}" "${tmp_err}"
     return 0
   fi
   cat "${tmp_err}" >&2 || true
   cat "${tmp_out}" >&2 || true
+  rm -f "${tmp_out}" "${tmp_err}"
   return 1
 }
 
@@ -240,8 +259,8 @@ start_vm_if_needed() {
     log "VM already running (${label})"
     return 0
   fi
-  log "Starting VM (${label})"
-  ps_run "& '${VMRUN_WIN}' start '${vmx_win}' nogui"
+  log "Starting VM (${label}) with mode=${VM_START_MODE}"
+  ps_run "& '${VMRUN_WIN}' start '${vmx_win}' '${VM_START_MODE}'"
 }
 
 wait_for_vm_ip() {
@@ -292,16 +311,89 @@ write_vm_name_vars_file() {
 set_vmx_display_name() {
   local vmx_file="$1"
   local display_name="$2"
+  local tmp_file
 
   if [[ ! -f "${vmx_file}" ]]; then
     return 0
   fi
 
-  if grep -q '^[[:space:]]*displayName[[:space:]]*=' "${vmx_file}"; then
-    sed -i "s|^[[:space:]]*displayName[[:space:]]*=.*$|displayName = \"${display_name}\"|" "${vmx_file}"
-  else
-    printf '\ndisplayName = "%s"\n' "${display_name}" >> "${vmx_file}"
+  tmp_file="$(mktemp)"
+  awk -v display_name="${display_name}" '
+    BEGIN {
+      replaced = 0
+    }
+    {
+      line = tolower($0)
+      if (line ~ /^[[:space:]]*displayname[[:space:]]*=/) {
+        if (!replaced) {
+          print "displayname = \"" display_name "\""
+          replaced = 1
+        }
+        next
+      }
+      print $0
+    }
+    END {
+      if (!replaced) {
+        print "displayname = \"" display_name "\""
+      }
+    }
+  ' "${vmx_file}" > "${tmp_file}"
+
+  mv "${tmp_file}" "${vmx_file}"
+}
+
+resolve_vmware_exe() {
+  local from_vars
+  local candidate
+  local unix_candidate
+  local candidates=()
+
+  if [[ -n "${VMWARE_EXE_WIN}" ]]; then
+    candidates+=("${VMWARE_EXE_WIN}")
   fi
+
+  from_vars="$(read_optional_packer_var "${CP_VARS_FILE}" vmware_workstation_path)"
+  if [[ -n "${from_vars}" ]]; then
+    if [[ "${from_vars,,}" == *.exe ]]; then
+      candidates+=("${from_vars}")
+    else
+      from_vars="${from_vars%/}"
+      from_vars="${from_vars%\\}"
+      candidates+=("${from_vars}/vmware.exe")
+    fi
+  fi
+
+  candidates+=(
+    "C:/Program Files (x86)/VMware/VMware Workstation/vmware.exe"
+    "C:/Program Files/VMware/VMware Workstation/vmware.exe"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    [[ -n "${candidate}" ]] || continue
+    if [[ "${candidate}" == /* ]]; then
+      candidate="$(to_windows_path "${candidate}")"
+    fi
+    unix_candidate="$(to_unix_path "${candidate}")"
+    if [[ -f "${unix_candidate}" ]]; then
+      VMWARE_EXE_WIN="$(normalize_win_path "$(to_windows_path "${unix_candidate}")")"
+      return 0
+    fi
+  done
+
+  die "vmware.exe not found. Provide --vmware-exe or set vmware_workstation_path in var file."
+}
+
+register_vm_in_workstation() {
+  local vmx_win="$1"
+  local label="$2"
+
+  if [[ "${REGISTER_IN_WORKSTATION}" -ne 1 ]]; then
+    return 0
+  fi
+
+  log "Registering VM in VMware Workstation UI (${label})"
+  ps_run "if (!(Test-Path -LiteralPath '${vmx_win}')) { throw 'VMX not found: ${vmx_win}' }; Start-Process -FilePath '${VMWARE_EXE_WIN}' -ArgumentList @('${vmx_win}') | Out-Null"
 }
 
 ensure_worker_clone() {
@@ -359,10 +451,24 @@ while [[ $# -gt 0 ]]; do
       VMRUN_WIN="$2"
       shift 2
       ;;
+    --vmware-exe)
+      [[ $# -ge 2 ]] || die "--vmware-exe requires a value"
+      VMWARE_EXE_WIN="$2"
+      shift 2
+      ;;
     --powershell-bin)
       [[ $# -ge 2 ]] || die "--powershell-bin requires a value"
       POWERSHELL_BIN="$2"
       shift 2
+      ;;
+    --vm-start-mode)
+      [[ $# -ge 2 ]] || die "--vm-start-mode requires a value"
+      VM_START_MODE="${2,,}"
+      shift 2
+      ;;
+    --skip-workstation-register)
+      REGISTER_IN_WORKSTATION=0
+      shift
       ;;
     --skip-build)
       SKIP_BUILD=1
@@ -463,6 +569,30 @@ while [[ $# -gt 0 ]]; do
       REMOTE_REPO_ROOT="$2"
       shift 2
       ;;
+    --skip-ingress-setup)
+      SETUP_INGRESS_STACK=0
+      shift
+      ;;
+    --metallb-range)
+      [[ $# -ge 2 ]] || die "--metallb-range requires a value"
+      METALLB_ADDRESS_RANGE="$2"
+      shift 2
+      ;;
+    --ingress-lb-ip)
+      [[ $# -ge 2 ]] || die "--ingress-lb-ip requires a value"
+      INGRESS_LB_IP="$2"
+      shift 2
+      ;;
+    --metallb-manifest)
+      [[ $# -ge 2 ]] || die "--metallb-manifest requires a value"
+      METALLB_MANIFEST="$2"
+      shift 2
+      ;;
+    --ingress-manifest)
+      [[ $# -ge 2 ]] || die "--ingress-manifest requires a value"
+      INGRESS_MANIFEST="$2"
+      shift 2
+      ;;
     --wait-ip-timeout-sec)
       [[ $# -ge 2 ]] || die "--wait-ip-timeout-sec requires a value"
       WAIT_IP_TIMEOUT_SEC="$2"
@@ -492,6 +622,13 @@ VMRUN_UNIX="$(to_unix_path "${VMRUN_WIN}")"
 [[ -f "${VMRUN_UNIX}" ]] || die "vmrun.exe not found: ${VMRUN_WIN}"
 VMRUN_WIN="$(normalize_win_path "$(to_windows_path "${VMRUN_UNIX}")")"
 
+case "${VM_START_MODE}" in
+  gui|nogui) ;;
+  *)
+    die "--vm-start-mode must be one of: gui, nogui"
+    ;;
+esac
+
 if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
   [[ -n "${CONTROL_PLANE_IP}" ]] || die "--control-plane-ip is required with --static-network"
   [[ -n "${WORKER1_IP}" ]] || die "--worker1-ip is required with --static-network"
@@ -508,6 +645,10 @@ trap cleanup EXIT
 
 CP_VARS_FILE="${RUNTIME_DIR}/control-plane.auto.pkrvars.hcl"
 write_vm_name_vars_file "${PACKER_VARS}" "${CP_VARS_FILE}" "${CONTROL_PLANE_NAME}"
+
+if [[ "${REGISTER_IN_WORKSTATION}" -eq 1 ]]; then
+  resolve_vmware_exe
+fi
 
 if [[ -z "${SSH_USER}" ]]; then
   SSH_USER="$(read_packer_var "${CP_VARS_FILE}" ssh_username)"
@@ -558,6 +699,13 @@ log "Step 2/4: Ensuring worker clones exist"
 ensure_worker_clone "${WORKER1_NAME}" "${WORKER1_VMX_WIN}" "${WORKER1_VMX_WSL}"
 ensure_worker_clone "${WORKER2_NAME}" "${WORKER2_VMX_WIN}" "${WORKER2_VMX_WSL}"
 
+if [[ "${REGISTER_IN_WORKSTATION}" -eq 1 ]]; then
+  log "Step 2.5/4: Registering VMX files in VMware Workstation UI"
+  register_vm_in_workstation "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
+  register_vm_in_workstation "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
+  register_vm_in_workstation "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
+fi
+
 log "Step 3/4: Starting 3 VMs"
 start_vm_if_needed "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
 start_vm_if_needed "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
@@ -567,6 +715,15 @@ log "Waiting for guest IPs from VMware Tools"
 CONTROL_PLANE_SSH_HOST="$(wait_for_vm_ip "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}")"
 WORKER1_SSH_HOST="$(wait_for_vm_ip "${WORKER1_VMX_WIN}" "${WORKER1_NAME}")"
 WORKER2_SSH_HOST="$(wait_for_vm_ip "${WORKER2_VMX_WIN}" "${WORKER2_NAME}")"
+
+if [[ "${CONTROL_PLANE_SSH_HOST}" == "${WORKER1_SSH_HOST}" || "${CONTROL_PLANE_SSH_HOST}" == "${WORKER2_SSH_HOST}" || "${WORKER1_SSH_HOST}" == "${WORKER2_SSH_HOST}" ]]; then
+  if [[ "${SKIP_BOOTSTRAP}" -eq 1 ]]; then
+    log "WARNING: Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST})."
+    log "WARNING: For stable multi-node bootstrap, rerun with --static-network and unique IPs."
+  else
+    die "Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST}). Rerun with --static-network and unique control-plane/worker IPs."
+  fi
+fi
 
 if [[ "${SKIP_BOOTSTRAP}" -eq 1 ]]; then
   log "Step 4/4: Bootstrap skipped (--skip-bootstrap)"
@@ -618,6 +775,11 @@ write_env_var "${BOOTSTRAP_CONFIG}" APPLY_OVERLAY "${APPLY_OVERLAY}"
 write_env_var "${BOOTSTRAP_CONFIG}" ENVIRONMENT "${ENVIRONMENT}"
 write_env_var "${BOOTSTRAP_CONFIG}" OVERLAY "${OVERLAY}"
 write_env_var "${BOOTSTRAP_CONFIG}" REMOTE_REPO_ROOT "${REMOTE_REPO_ROOT}"
+write_env_var "${BOOTSTRAP_CONFIG}" SETUP_INGRESS_STACK "${SETUP_INGRESS_STACK}"
+write_env_var "${BOOTSTRAP_CONFIG}" METALLB_ADDRESS_RANGE "${METALLB_ADDRESS_RANGE}"
+write_env_var "${BOOTSTRAP_CONFIG}" INGRESS_LB_IP "${INGRESS_LB_IP}"
+write_env_var "${BOOTSTRAP_CONFIG}" METALLB_MANIFEST "${METALLB_MANIFEST}"
+write_env_var "${BOOTSTRAP_CONFIG}" INGRESS_MANIFEST "${INGRESS_MANIFEST}"
 
 log "Step 4/4: Bootstrapping 3-node cluster (join + overlay)"
 bash "${ROOT_DIR}/scripts/bootstrap_3node_k8s_ova.sh" --config "${BOOTSTRAP_CONFIG}"

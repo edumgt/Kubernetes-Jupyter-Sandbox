@@ -12,7 +12,9 @@
 5. `PORTS.md`
 6. `TROUBLESHOOTING.md`
 7. `CHECK.md`
-8. `CHANGELOG.md`
+8. `CHECKLIST.md`
+9. `TODO.md`
+10. `CHANGELOG.md`
 
 ## 2) 루트 `.md` 파일 목적 요약
 
@@ -27,6 +29,8 @@
 | `PORTS.md` | 포트 맵 | 방화벽/접속 문제 확인 | NodePort/내부포트 정리 |
 | `TROUBLESHOOTING.md` | 장애 대응 절차 | Pod/CNI/접속 장애 시 | 빠른 점검 명령 모음 |
 | `CHECK.md` | OVA Golden Image 체크리스트 | 배포 전 품질 점검 | 항목형 검수 문서 |
+| `CHECKLIST.md` | `start.sh` 반복 빌드/검증 체크리스트 | 변경 후 OVA 재생성 루틴 | VMware 3-node 기준 |
+| `TODO.md` | 반복 빌드 고도화 작업 백로그 | 다음 개선 과제 관리 | 우선순위별 TODO 템플릿 |
 | `CHANGELOG.md` | 문서/스크립트 변경 이력 | 변경 추적 시 | 최신 변경 요약 |
 | `TEST.md` | 테스트 스냅샷(한국어) | 과거 검증 근거 확인 | 2026-03-19 기준, VirtualBox 맥락 포함 |
 | `TEST.en.md` | 테스트 스냅샷(영문) | 과거 검증 근거 확인 | `TEST.md` 영어판 |
@@ -36,8 +40,9 @@
 ## 3) 현재 기준 핵심 실행 문서
 
 - VMware 멀티노드 자동 구성: `README.md` + `docs/vmware/README.md`
+- 스크립트 역할 분리: `start.sh`(구성/검증), `ovabuild.sh`(OVA export)
 - 단일 서비스 빠른 확인: `QUICKSTART.md`
-- 설치/운영 표준화: `INSTALL.md`, `CHECK.md`, `TROUBLESHOOTING.md`
+- 설치/운영 표준화: `INSTALL.md`, `CHECK.md`, `CHECKLIST.md`, `TODO.md`, `TROUBLESHOOTING.md`
 
 ## 4) 보조 문서(루트 외) 추천
 

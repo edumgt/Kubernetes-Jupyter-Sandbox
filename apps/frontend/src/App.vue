@@ -697,8 +697,7 @@ import frontendPackage from "../package.json";
 
 const browserProtocol = typeof window !== "undefined" ? window.location.protocol : "http:";
 const browserHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
-const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL || `${browserProtocol}//${browserHost}:30081`;
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || `${browserProtocol}//${browserHost}`;
 const frontendAppVersion = frontendPackage.version;
 
 const savedAuthToken =

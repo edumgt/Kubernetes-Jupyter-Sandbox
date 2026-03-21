@@ -64,6 +64,7 @@
     - /opt/k8s-data-platform/scripts/generate_join_command.sh
     - /opt/k8s-data-platform/scripts/join_worker_node.sh
     - /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh
+    - /opt/k8s-data-platform/scripts/setup_ingress_metallb.sh
 
 - name: Configure code-server environment
   copy:
@@ -152,6 +153,37 @@
     state: touch
     mode: '0644'
 
+- name: Bootstrap Nexus repositories and warm offline development caches
+  command:
+    argv:
+      - bash
+      - /opt/k8s-data-platform/scripts/setup_nexus_offline.sh
+      - --namespace
+      - data-platform-dev
+      - --nexus-url
+      - http://127.0.0.1:30091
+      - --target-password
+      - nexus123!
+      - --username
+      - admin
+      - --password
+      - nexus123!
+      - --python-seed-file
+      - /opt/k8s-data-platform/scripts/offline/python-dev-seed.txt
+      - --npm-seed-file
+      - /opt/k8s-data-platform/scripts/offline/npm-dev-seed.txt
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  args:
+    chdir: /opt/k8s-data-platform
+    creates: /opt/k8s-data-platform/.nexus-offline-ready
+
+- name: Mark Nexus offline warm-up completed
+  file:
+    path: /opt/k8s-data-platform/.nexus-offline-ready
+    state: touch
+    mode: '0644'
+
 - name: Install platform offline bundle import helper
   copy:
     dest: /usr/local/bin/platform-import-bundle.sh
@@ -197,7 +229,7 @@
       set -euo pipefail
       TARGET_HOST="${1:-127.0.0.1}"
       shift || true
-      exec bash /opt/k8s-data-platform/scripts/verify.sh --host "${TARGET_HOST}" "$@"
+      exec bash /opt/k8s-data-platform/scripts/verify.sh --http-mode nodeport --host "${TARGET_HOST}" "$@"
 
 - name: Install platform join command helper
   copy:
@@ -255,6 +287,7 @@
       kubectl get svc -n data-platform-dev
       kubectl get pvc -n data-platform-dev
       platform-import-bundle.sh --apply --env dev
+      bash /opt/k8s-data-platform/scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url http://127.0.0.1:30091
       platform-frontend-setup.sh
       platform-frontend-dev.sh
       platform-verify-ova.sh 127.0.0.1

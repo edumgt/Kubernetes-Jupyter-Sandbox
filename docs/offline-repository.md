@@ -30,32 +30,55 @@
 
 ```bash
 bash scripts/apply_k8s.sh --env dev
-bash scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url http://127.0.0.1:30091
+bash scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url http://nexus.platform.local
 ```
+
+참고:
+- control-plane VM 내부에서 직접 실행할 때는 `--nexus-url http://127.0.0.1:30091` 를 사용해도 됩니다.
 
 Nexus 가 이미 초기화되어 admin 비밀번호가 바뀐 경우:
 
 ```bash
 bash scripts/setup_nexus_offline.sh \
   --namespace data-platform-dev \
-  --nexus-url http://127.0.0.1:30091 \
+  --nexus-url http://nexus.platform.local \
   --current-password '<current-admin-password>' \
   --target-password '<new-admin-password>' \
   --username admin \
   --password '<new-admin-password>'
 ```
 
+개발용 추가 seed 라이브러리(Backend Python + Vue3/Quasar npm)를 함께 워밍하려면:
+
+```bash
+bash scripts/setup_nexus_offline.sh \
+  --namespace data-platform-dev \
+  --nexus-url http://nexus.platform.local \
+  --username admin \
+  --password '<nexus-password>' \
+  --python-seed-file scripts/offline/python-dev-seed.txt \
+  --npm-seed-file scripts/offline/npm-dev-seed.txt
+```
+
 생성되는 주요 endpoint:
 
-- `http://127.0.0.1:30091/repository/pypi-all/simple`
-- `http://127.0.0.1:30091/repository/npm-all/`
-- `http://127.0.0.1:30091/repository/offline-bundle/`
+- `http://nexus.platform.local/repository/pypi-all/simple`
+- `http://nexus.platform.local/repository/npm-all/`
+- `http://nexus.platform.local/repository/offline-bundle/`
+
+## 권장 PVC 용량 (폐쇄망 개발 기준)
+
+- `nexus-data`: `80Gi`
+- `gitlab-data`: `60Gi`
+- `gitlab-config`: `10Gi`
+- `gitlab-logs`: `10Gi`
+- `jupyter-workspace`: `10Gi`
 
 재부팅 후 의존성 접근 검증:
 
 ```bash
 bash scripts/verify_nexus_dependencies.sh \
-  --nexus-url http://127.0.0.1:30091 \
+  --nexus-url http://nexus.platform.local \
   --username admin \
   --password '<nexus-password>'
 ```

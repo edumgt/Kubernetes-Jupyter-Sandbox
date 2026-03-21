@@ -4,7 +4,7 @@ metadata:
   name: pv-dev-3node-gitlab-config
 spec:
   capacity:
-    storage: 5Gi
+    storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
@@ -30,7 +30,7 @@ metadata:
   name: pv-dev-3node-gitlab-logs
 spec:
   capacity:
-    storage: 5Gi
+    storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
@@ -56,7 +56,7 @@ metadata:
   name: pv-dev-3node-gitlab-data
 spec:
   capacity:
-    storage: 20Gi
+    storage: 60Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
@@ -82,7 +82,7 @@ metadata:
   name: pv-dev-3node-jupyter-workspace
 spec:
   capacity:
-    storage: 5Gi
+    storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
@@ -108,7 +108,7 @@ metadata:
   name: pv-dev-3node-nexus-data
 spec:
   capacity:
-    storage: 20Gi
+    storage: 80Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain

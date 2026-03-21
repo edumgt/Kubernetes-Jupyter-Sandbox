@@ -514,7 +514,7 @@ if [[ "${SKIP_VERIFY}" -eq 0 ]]; then
   log "Waiting for Kubernetes/services to become ready in VM"
   VERIFY_OK=0
   for attempt in $(seq 1 90); do
-    if ssh_run "sudo bash /opt/k8s-data-platform/scripts/verify.sh --env '${ENVIRONMENT}' --host 127.0.0.1 --http-timeout 5" >/tmp/vmware_verify.out 2>/tmp/vmware_verify.err; then
+    if ssh_run "sudo bash /opt/k8s-data-platform/scripts/verify.sh --env '${ENVIRONMENT}' --http-mode nodeport --host 127.0.0.1 --http-timeout 5" >/tmp/vmware_verify.out 2>/tmp/vmware_verify.err; then
       VERIFY_OK=1
       break
     fi

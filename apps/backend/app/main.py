@@ -228,7 +228,7 @@ def dashboard() -> DashboardResponse:
             "kind": "cicd",
             "endpoint": settings.gitlab_url,
             "ok": True,
-            "detail": "GitLab CE exposed on NodePort 30089 and SSH NodePort 30224",
+            "detail": "GitLab CE web UI is exposed by ingress; SSH is available on port 30224.",
         },
     ]
 

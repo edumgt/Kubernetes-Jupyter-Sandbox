@@ -7,6 +7,7 @@ resources:
   - ../../base
   - namespace.yaml
   - local-pv.yaml
+  - platform-ingress.yaml
 
 labels:
   - pairs:
@@ -18,3 +19,4 @@ patches:
   - path: platform-secrets-patch.yaml
   - path: backend-clusterrolebinding-patch.yaml
   - path: node-placement-patch.yaml
+  - path: gitlab-ingress-patch.yaml

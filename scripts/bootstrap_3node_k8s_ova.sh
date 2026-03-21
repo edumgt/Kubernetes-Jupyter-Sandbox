@@ -17,6 +17,7 @@ Features:
   2) Hostname + /etc/hosts alignment
   3) kubeadm join for worker nodes
   4) Optional overlay apply for GitLab + Nexus placement (dev-3node)
+  5) Optional NGINX Ingress + MetalLB setup for URL-based access
 
 Required:
   - SSH access to all nodes
@@ -101,6 +102,11 @@ APPLY_OVERLAY="${APPLY_OVERLAY:-1}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 OVERLAY="${OVERLAY:-dev-3node}"
 REMOTE_REPO_ROOT="${REMOTE_REPO_ROOT:-/opt/k8s-data-platform}"
+SETUP_INGRESS_STACK="${SETUP_INGRESS_STACK:-1}"
+METALLB_ADDRESS_RANGE="${METALLB_ADDRESS_RANGE:-}"
+INGRESS_LB_IP="${INGRESS_LB_IP:-}"
+METALLB_MANIFEST="${METALLB_MANIFEST:-}"
+INGRESS_MANIFEST="${INGRESS_MANIFEST:-}"
 
 [[ -n "${CONTROL_PLANE_SSH_HOST}" ]] || die "CONTROL_PLANE_SSH_HOST is required."
 [[ -n "${CONTROL_PLANE_IP}" ]] || die "CONTROL_PLANE_IP is required."
@@ -116,6 +122,7 @@ fi
 require_command ssh
 require_command scp
 require_command base64
+require_command awk
 
 SSH_OPTS=(
   -p "${SSH_PORT}"
@@ -179,6 +186,20 @@ wait_for_ssh() {
   done
 
   die "Timed out waiting for SSH (${label}): ${host}"
+}
+
+default_ingress_values() {
+  local prefix
+  prefix="$(printf '%s' "${CONTROL_PLANE_IP}" | awk -F '.' 'NF == 4 { print $1 "." $2 "." $3 }')"
+  [[ -n "${prefix}" ]] || die "Unable to derive /24 prefix from CONTROL_PLANE_IP=${CONTROL_PLANE_IP}"
+
+  if [[ -z "${METALLB_ADDRESS_RANGE}" ]]; then
+    METALLB_ADDRESS_RANGE="${prefix}.240-${prefix}.250"
+  fi
+
+  if [[ -z "${INGRESS_LB_IP}" ]]; then
+    INGRESS_LB_IP="${prefix}.240"
+  fi
 }
 
 HOSTS_BLOCK="$(cat <<EOF
@@ -313,12 +334,44 @@ if is_true "${APPLY_OVERLAY}"; then
   ssh_run "${CONTROL_PLANE_IP}" "if [[ -f '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' ]]; then sudo bash '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' --env '${ENVIRONMENT}' --overlay '${OVERLAY}' --workers '${WORKER1_HOSTNAME},${WORKER2_HOSTNAME}'; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' >&2; exit 1; fi"
 fi
 
+if is_true "${SETUP_INGRESS_STACK}"; then
+  default_ingress_values
+  log "Configuring ingress-nginx + MetalLB (range=${METALLB_ADDRESS_RANGE}, lb_ip=${INGRESS_LB_IP})"
+
+  REMOTE_INGRESS_CMD="if [[ -f '${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' ]]; then sudo bash '${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' --metallb-range '${METALLB_ADDRESS_RANGE}' --ingress-lb-ip '${INGRESS_LB_IP}'"
+  if [[ -n "${METALLB_MANIFEST}" ]]; then
+    REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD} --metallb-manifest '${METALLB_MANIFEST}'"
+  fi
+  if [[ -n "${INGRESS_MANIFEST}" ]]; then
+    REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD} --ingress-manifest '${INGRESS_MANIFEST}'"
+  fi
+  REMOTE_INGRESS_CMD="${REMOTE_INGRESS_CMD}; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/setup_ingress_metallb.sh' >&2; exit 1; fi"
+
+  ssh_run "${CONTROL_PLANE_IP}" "${REMOTE_INGRESS_CMD}"
+fi
+
 log "Final node status"
 ssh_run "${CONTROL_PLANE_IP}" "sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide"
 
 log "3-node bootstrap completed."
-log "Access endpoints:"
-log "  Frontend : http://${CONTROL_PLANE_IP}:30080"
-log "  Backend  : http://${CONTROL_PLANE_IP}:30081"
-log "  GitLab   : http://${CONTROL_PLANE_IP}:30089"
-log "  Nexus    : http://${CONTROL_PLANE_IP}:30091"
+if is_true "${SETUP_INGRESS_STACK}"; then
+  log "Access endpoints (Ingress URL):"
+  log "  Frontend : http://platform.local"
+  log "  Backend  : http://platform.local/docs"
+  log "  Jupyter  : http://jupyter.platform.local/lab"
+  log "  GitLab   : http://gitlab.platform.local"
+  log "  Airflow  : http://airflow.platform.local"
+  log "  Nexus    : http://nexus.platform.local"
+  log "Hosts file example:"
+  log "  ${INGRESS_LB_IP} platform.local"
+  log "  ${INGRESS_LB_IP} jupyter.platform.local"
+  log "  ${INGRESS_LB_IP} gitlab.platform.local"
+  log "  ${INGRESS_LB_IP} airflow.platform.local"
+  log "  ${INGRESS_LB_IP} nexus.platform.local"
+else
+  log "Access endpoints (legacy NodePort):"
+  log "  Frontend : http://${CONTROL_PLANE_IP}:30080"
+  log "  Backend  : http://${CONTROL_PLANE_IP}:30081"
+  log "  GitLab   : http://${CONTROL_PLANE_IP}:30089"
+  log "  Nexus    : http://${CONTROL_PLANE_IP}:30091"
+fi

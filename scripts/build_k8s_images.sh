@@ -171,7 +171,7 @@ SUPPORT_IMAGES=(
 
 PLATFORM_IMAGES=(
   "backend|apps/backend|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-backend:${IMAGE_TAG}|"
-  "frontend|apps/frontend|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-frontend:${IMAGE_TAG}|http://localhost:30081"
+  "frontend|apps/frontend|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-frontend:${IMAGE_TAG}|"
   "airflow|apps/airflow|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-airflow:${IMAGE_TAG}|"
   "jupyter|apps/jupyter|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-jupyter:${IMAGE_TAG}|"
 )

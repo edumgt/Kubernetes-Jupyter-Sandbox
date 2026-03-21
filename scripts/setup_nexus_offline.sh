@@ -9,6 +9,10 @@ CURRENT_PASSWORD="${CURRENT_PASSWORD:-}"
 NEXUS_USERNAME="${NEXUS_USERNAME:-admin}"
 NEXUS_PASSWORD="${NEXUS_PASSWORD:-}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist/nexus-prime}"
+PYTHON_SEED_FILE="${PYTHON_SEED_FILE:-${ROOT_DIR}/scripts/offline/python-dev-seed.txt}"
+NPM_SEED_FILE="${NPM_SEED_FILE:-${ROOT_DIR}/scripts/offline/npm-dev-seed.txt}"
+SKIP_PYTHON_SEED=0
+SKIP_NPM_SEED=0
 DRY_RUN=0
 
 usage() {
@@ -23,6 +27,10 @@ Options:
   --username <name>        Repository username for cache priming.
   --password <pw>          Repository password for cache priming.
   --out-dir <path>         Output directory for warmed Python/npm caches.
+  --python-seed-file <p>   Extra Python dev seed list path.
+  --npm-seed-file <p>      Extra npm dev seed list path.
+  --skip-python-seed       Skip extra Python dev seed warming.
+  --skip-npm-seed          Skip extra npm dev seed warming.
   --dry-run                Print commands without executing them.
   -h, --help               Show this help.
 EOF
@@ -80,6 +88,24 @@ while [[ $# -gt 0 ]]; do
       OUT_DIR="$2"
       shift 2
       ;;
+    --python-seed-file)
+      [[ $# -ge 2 ]] || die "--python-seed-file requires a value"
+      PYTHON_SEED_FILE="$2"
+      shift 2
+      ;;
+    --npm-seed-file)
+      [[ $# -ge 2 ]] || die "--npm-seed-file requires a value"
+      NPM_SEED_FILE="$2"
+      shift 2
+      ;;
+    --skip-python-seed)
+      SKIP_PYTHON_SEED=1
+      shift
+      ;;
+    --skip-npm-seed)
+      SKIP_NPM_SEED=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -105,9 +131,22 @@ run_subcommand bash "${ROOT_DIR}/scripts/bootstrap_nexus_repos.sh" \
   --target-password "${TARGET_PASSWORD}" \
   $( [[ "${DRY_RUN}" == "1" ]] && printf '%s' '--dry-run' )
 
-run_subcommand bash "${ROOT_DIR}/scripts/prime_nexus_caches.sh" \
-  --nexus-url "${NEXUS_URL}" \
-  --username "${NEXUS_USERNAME}" \
-  --password "${NEXUS_PASSWORD}" \
-  --out-dir "${OUT_DIR}" \
-  $( [[ "${DRY_RUN}" == "1" ]] && printf '%s' '--dry-run' )
+prime_cmd=(
+  bash "${ROOT_DIR}/scripts/prime_nexus_caches.sh"
+  --nexus-url "${NEXUS_URL}"
+  --username "${NEXUS_USERNAME}"
+  --password "${NEXUS_PASSWORD}"
+  --out-dir "${OUT_DIR}"
+  --python-seed-file "${PYTHON_SEED_FILE}"
+  --npm-seed-file "${NPM_SEED_FILE}"
+)
+if [[ "${SKIP_PYTHON_SEED}" == "1" ]]; then
+  prime_cmd+=(--skip-python-seed)
+fi
+if [[ "${SKIP_NPM_SEED}" == "1" ]]; then
+  prime_cmd+=(--skip-npm-seed)
+fi
+if [[ "${DRY_RUN}" == "1" ]]; then
+  prime_cmd+=(--dry-run)
+fi
+run_subcommand "${prime_cmd[@]}"
