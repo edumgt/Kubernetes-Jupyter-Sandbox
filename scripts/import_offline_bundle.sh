@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/kubernetes_runtime.sh
 source "${SCRIPT_DIR}/lib/kubernetes_runtime.sh"
+# shellcheck source=scripts/lib/image_registry.sh
+source "${SCRIPT_DIR}/lib/image_registry.sh"
 
 BUNDLE_DIR="${BUNDLE_DIR:-/opt/k8s-data-platform/offline-bundle}"
 ENVIRONMENT="dev"
@@ -21,6 +23,9 @@ Usage: bash scripts/import_offline_bundle.sh [options]
 Options:
   --bundle-dir <path>  Offline bundle root directory. Defaults to /opt/k8s-data-platform/offline-bundle.
   --env <dev|prod>     Apply the selected k8s overlay when --apply is used. Defaults to dev.
+  --image-registry H   Override image registry host for bundled kustomize apply.
+  --image-namespace N  Override image namespace/project for bundled kustomize apply.
+  --image-tag TAG      Override app image tag for bundled kustomize apply.
   --apply              Apply the bundled k8s overlay after importing images.
   --with-runner        Apply the bundled GitLab Runner overlay too. Only valid with --apply.
   --docker-only        Import archives into Docker only.
@@ -77,6 +82,21 @@ import_to_runtime() {
   import_archive_into_runtime "${archive}"
 }
 
+apply_bundle_overlay() {
+  local overlay_dir="$1"
+  local temp_dir=""
+
+  if registry_override_enabled; then
+    temp_dir="$(mktemp -d)"
+    write_platform_image_override_kustomization "${temp_dir}/kustomization.yaml" "${overlay_dir}"
+    run_cmd kubectl apply -k "${temp_dir}"
+    rm -rf "${temp_dir}"
+    return 0
+  fi
+
+  run_cmd kubectl apply -k "${overlay_dir}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bundle-dir)
@@ -87,6 +107,21 @@ while [[ $# -gt 0 ]]; do
     --env)
       [[ $# -ge 2 ]] || die "--env requires a value"
       set_environment "$2"
+      shift 2
+      ;;
+    --image-registry)
+      [[ $# -ge 2 ]] || die "--image-registry requires a value"
+      IMAGE_REGISTRY="$2"
+      shift 2
+      ;;
+    --image-namespace)
+      [[ $# -ge 2 ]] || die "--image-namespace requires a value"
+      IMAGE_NAMESPACE="$2"
+      shift 2
+      ;;
+    --image-tag)
+      [[ $# -ge 2 ]] || die "--image-tag requires a value"
+      IMAGE_TAG="$2"
       shift 2
       ;;
     --apply)
@@ -157,9 +192,9 @@ for archive in "${archives[@]}"; do
 done
 
 if [[ "${APPLY_MANIFESTS}" == "1" ]]; then
-  run_cmd kubectl apply -k "${MANIFEST_DIR}/overlays/${ENVIRONMENT}"
+  apply_bundle_overlay "${MANIFEST_DIR}/overlays/${ENVIRONMENT}"
   if [[ "${WITH_RUNNER}" == "1" ]]; then
-    run_cmd kubectl apply -k "${MANIFEST_DIR}/runner/overlays/${ENVIRONMENT}"
+    apply_bundle_overlay "${MANIFEST_DIR}/runner/overlays/${ENVIRONMENT}"
   fi
 fi
 

@@ -4,6 +4,8 @@ set -euo pipefail
 METALLB_VERSION="${METALLB_VERSION:-v0.14.8}"
 INGRESS_NGINX_VERSION="${INGRESS_NGINX_VERSION:-controller-v1.12.2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/image_registry.sh
+source "${SCRIPT_DIR}/lib/image_registry.sh"
 LOCAL_MANIFEST_DIR_DEFAULT="${SCRIPT_DIR%/scripts}/offline/manifests"
 REMOTE_BUNDLE_MANIFEST_DIR="/opt/k8s-data-platform/offline-bundle/k8s/manifests"
 
@@ -68,6 +70,23 @@ resolve_default_manifest_path() {
   fi
 
   printf '%s' "${remote_url}"
+}
+
+resolve_manifest_for_registry() {
+  local manifest_path="$1"
+  local temp_dir="${2:-}"
+  local target_path
+
+  if ! registry_override_enabled || [[ ! -f "${manifest_path}" ]]; then
+    printf '%s' "${manifest_path}"
+    return 0
+  fi
+
+  [[ -n "${temp_dir}" ]] || die "temp dir required for manifest registry rewrite"
+  mkdir -p "${temp_dir}"
+  target_path="${temp_dir}/$(basename "${manifest_path}")"
+  rewrite_registry_prefix_in_file "${manifest_path}" "${target_path}"
+  printf '%s' "${target_path}"
 }
 
 require_command() {
@@ -181,6 +200,14 @@ if [[ -z "${METALLB_MANIFEST}" ]]; then
 fi
 if [[ -z "${INGRESS_MANIFEST}" ]]; then
   INGRESS_MANIFEST="$(resolve_default_manifest_path "ingress-nginx.yaml" "https://raw.githubusercontent.com/kubernetes/ingress-nginx/${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml")"
+fi
+
+TMP_MANIFEST_DIR=""
+if registry_override_enabled; then
+  TMP_MANIFEST_DIR="$(mktemp -d)"
+  trap 'rm -rf "${TMP_MANIFEST_DIR}"' EXIT
+  METALLB_MANIFEST="$(resolve_manifest_for_registry "${METALLB_MANIFEST}" "${TMP_MANIFEST_DIR}")"
+  INGRESS_MANIFEST="$(resolve_manifest_for_registry "${INGRESS_MANIFEST}" "${TMP_MANIFEST_DIR}")"
 fi
 
 if [[ "${SKIP_POOL_APPLY}" -eq 0 && -z "${METALLB_RANGE}" ]]; then

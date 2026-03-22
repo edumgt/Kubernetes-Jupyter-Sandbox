@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "${ROOT_DIR}/scripts/lib/vm_base_packages.sh"
 PACKER_VARS="${PACKER_VARS:-${ROOT_DIR}/packer/variables.vmware.auto.pkrvars.hcl}"
+BUNDLE_DIR="${BUNDLE_DIR:-${ROOT_DIR}/dist/vm-apt-bundle}"
+REMOTE_BUNDLE_DIR="${REMOTE_BUNDLE_DIR:-/opt/k8s-data-platform/vm-apt-bundle}"
 CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-192.168.56.10}"
 WORKER1_IP="${WORKER1_IP:-192.168.56.11}"
 WORKER2_IP="${WORKER2_IP:-192.168.56.12}"
@@ -11,28 +12,26 @@ SSH_USER="${SSH_USER:-}"
 SSH_PASSWORD="${SSH_PASSWORD:-}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 SSH_PORT="${SSH_PORT:-22}"
-PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.58.2-jammy}"
-INSTALL_PLAYWRIGHT_IMAGE=1
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/install_vm_base_packages.sh [options]
+Usage: bash scripts/install_vm_apt_bundle_to_vms.sh [options]
 
-Installs common Linux utility packages on the three VMware nodes and optionally
-pulls the Playwright Docker image onto each VM.
+Copies a prebuilt offline apt bundle from WSL into the three VMs and installs
+the packages without requiring outbound internet access from the VMs.
 
 Options:
-  --vars-file PATH            Packer vars file for SSH defaults.
-  --control-plane-ip IP       Control-plane VM IP.
-  --worker1-ip IP             Worker 1 VM IP.
-  --worker2-ip IP             Worker 2 VM IP.
-  --ssh-user USER             SSH username override.
-  --ssh-password PASS         SSH password override.
-  --ssh-key-path PATH         SSH private key override.
-  --ssh-port PORT             SSH port override (default: 22).
-  --playwright-image IMAGE    Playwright Docker image to pull on each VM.
-  --skip-playwright-image     Skip Docker pull on the VMs.
-  -h, --help                  Show this help.
+  --bundle-dir PATH         Local bundle directory.
+  --remote-bundle-dir PATH  Remote bundle directory.
+  --vars-file PATH          Packer vars file for SSH defaults.
+  --control-plane-ip IP     Control-plane VM IP.
+  --worker1-ip IP           Worker 1 VM IP.
+  --worker2-ip IP           Worker 2 VM IP.
+  --ssh-user USER           SSH username override.
+  --ssh-password PASS       SSH password override.
+  --ssh-key-path PATH       SSH private key override.
+  --ssh-port PORT           SSH port override.
+  -h, --help                Show this help.
 EOF
 }
 
@@ -77,6 +76,7 @@ require_command() {
 }
 
 ssh_opts=()
+scp_opts=()
 
 build_ssh_opts() {
   ssh_opts=(
@@ -86,9 +86,17 @@ build_ssh_opts() {
     -o LogLevel=ERROR
     -o ConnectTimeout=10
   )
+  scp_opts=(
+    -P "${SSH_PORT}"
+    -o StrictHostKeyChecking=accept-new
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=ERROR
+    -o ConnectTimeout=10
+  )
 
   if [[ -n "${SSH_KEY_PATH}" ]]; then
     ssh_opts+=(-i "${SSH_KEY_PATH}")
+    scp_opts+=(-i "${SSH_KEY_PATH}")
   fi
 }
 
@@ -102,6 +110,19 @@ ssh_run() {
   fi
 
   ssh "${ssh_opts[@]}" "${SSH_USER}@${host}" "$@"
+}
+
+scp_copy_dir() {
+  local src="$1"
+  local host="$2"
+  local dst="$3"
+
+  if [[ -n "${SSH_PASSWORD}" ]]; then
+    SSHPASS="${SSH_PASSWORD}" sshpass -e scp "${scp_opts[@]}" -r "${src}" "${SSH_USER}@${host}:${dst}"
+    return
+  fi
+
+  scp "${scp_opts[@]}" -r "${src}" "${SSH_USER}@${host}:${dst}"
 }
 
 remote_sudo() {
@@ -118,6 +139,14 @@ remote_sudo() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --bundle-dir)
+      BUNDLE_DIR="$2"
+      shift 2
+      ;;
+    --remote-bundle-dir)
+      REMOTE_BUNDLE_DIR="$2"
+      shift 2
+      ;;
     --vars-file)
       PACKER_VARS="$2"
       shift 2
@@ -150,14 +179,6 @@ while [[ $# -gt 0 ]]; do
       SSH_PORT="$2"
       shift 2
       ;;
-    --playwright-image)
-      PLAYWRIGHT_IMAGE="$2"
-      shift 2
-      ;;
-    --skip-playwright-image)
-      INSTALL_PLAYWRIGHT_IMAGE=0
-      shift
-      ;;
     -h|--help)
       usage
       exit 0
@@ -169,6 +190,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -f "${PACKER_VARS}" ]] || die "Packer vars file not found: ${PACKER_VARS}"
+[[ -d "${BUNDLE_DIR}/deb" ]] || die "Bundle directory missing deb payloads: ${BUNDLE_DIR}/deb"
+[[ -f "${BUNDLE_DIR}/install.sh" ]] || die "Bundle installer not found: ${BUNDLE_DIR}/install.sh"
+
 if [[ -z "${SSH_USER}" ]]; then
   SSH_USER="$(read_optional_packer_var ssh_username)"
 fi
@@ -180,14 +204,12 @@ fi
 [[ -n "${SSH_PASSWORD}" || -n "${SSH_KEY_PATH}" ]] || die "Provide --ssh-password or --ssh-key-path."
 
 require_command ssh
+require_command scp
 if [[ -n "${SSH_PASSWORD}" ]]; then
   require_command sshpass
 fi
 
 build_ssh_opts
-
-package_list="$(vm_base_packages_joined)"
-package_list="${package_list% }"
 
 hosts=(
   "${CONTROL_PLANE_IP}:control-plane"
@@ -197,21 +219,11 @@ hosts=(
 
 for item in "${hosts[@]}"; do
   IFS=':' read -r host label <<<"${item}"
-  log "Installing base packages on ${label} (${host})"
-  remote_sudo "${host}" "
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends ${package_list}
-    systemctl enable vsftpd >/dev/null 2>&1 || true
-    systemctl restart vsftpd >/dev/null 2>&1 || true
-    java -version >/dev/null 2>&1
-    python3 --version >/dev/null 2>&1
-  "
-
-  if [[ "${INSTALL_PLAYWRIGHT_IMAGE}" == "1" ]]; then
-    log "Pulling Playwright image on ${label} (${host})"
-    remote_sudo "${host}" "docker pull '${PLAYWRIGHT_IMAGE}'"
-  fi
+  log "Copying offline apt bundle to ${label} (${host})"
+  remote_sudo "${host}" "rm -rf '${REMOTE_BUNDLE_DIR}' && mkdir -p '${REMOTE_BUNDLE_DIR}' && chown '${SSH_USER}:${SSH_USER}' '${REMOTE_BUNDLE_DIR}'"
+  scp_copy_dir "${BUNDLE_DIR}/." "${host}" "${REMOTE_BUNDLE_DIR}"
+  log "Installing offline apt bundle on ${label} (${host})"
+  remote_sudo "${host}" "bash '${REMOTE_BUNDLE_DIR}/install.sh'"
 done
 
-log "VM base package installation completed."
+log "Offline apt bundle installation completed."

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/image_registry.sh
+source "${ROOT_DIR}/scripts/lib/image_registry.sh"
 PACKER_VARS="${PACKER_VARS:-${ROOT_DIR}/packer/variables.vmware.auto.pkrvars.hcl}"
 BUNDLE_DIR="${BUNDLE_DIR:-${ROOT_DIR}/dist/offline-bundle}"
 REMOTE_BUNDLE_DIR="${REMOTE_BUNDLE_DIR:-/opt/k8s-data-platform/offline-bundle}"
@@ -11,7 +13,8 @@ SSH_PASSWORD="${SSH_PASSWORD:-}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 SSH_PORT="${SSH_PORT:-22}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
-IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-edumgt}"
+IMAGE_REGISTRY="${IMAGE_REGISTRY:-harbor.local}"
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-data-platform}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 SKIP_BUILD=0
 APPLY_MANIFESTS=0
@@ -34,7 +37,8 @@ Options:
   --ssh-key-path PATH         SSH private key override.
   --ssh-port PORT             SSH port override (default: 22).
   --env dev|prod              Overlay env for optional --apply.
-  --namespace NAME            Image namespace for bundle build (default: edumgt).
+  --registry HOST             Image registry for bundle build/apply (default: harbor.local).
+  --namespace NAME            Image namespace for bundle build (default: data-platform).
   --tag TAG                   App image tag for bundle build (default: latest).
   --skip-build                Reuse an existing local offline bundle.
   --apply                     Apply bundled manifests after import.
@@ -192,6 +196,11 @@ while [[ $# -gt 0 ]]; do
       ENVIRONMENT="$2"
       shift 2
       ;;
+    --registry)
+      [[ $# -ge 2 ]] || die "--registry requires a value"
+      IMAGE_REGISTRY="$2"
+      shift 2
+      ;;
     --namespace)
       [[ $# -ge 2 ]] || die "--namespace requires a value"
       IMAGE_NAMESPACE="$2"
@@ -247,8 +256,8 @@ build_ssh_opts
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   log "Building offline bundle locally: ${BUNDLE_DIR}"
-  IMAGE_NAMESPACE="${IMAGE_NAMESPACE}" IMAGE_TAG="${IMAGE_TAG}" \
-    bash "${ROOT_DIR}/scripts/prepare_offline_bundle.sh" --out-dir "${BUNDLE_DIR}"
+  IMAGE_REGISTRY="${IMAGE_REGISTRY}" IMAGE_NAMESPACE="${IMAGE_NAMESPACE}" IMAGE_TAG="${IMAGE_TAG}" \
+    bash "${ROOT_DIR}/scripts/prepare_offline_bundle.sh" --out-dir "${BUNDLE_DIR}" --registry "${IMAGE_REGISTRY}" --namespace "${IMAGE_NAMESPACE}" --tag "${IMAGE_TAG}"
 else
   log "Reusing existing offline bundle: ${BUNDLE_DIR}"
 fi
@@ -264,6 +273,7 @@ scp_copy_dir "${BUNDLE_DIR}/." "${CONTROL_PLANE_IP}" "${REMOTE_BUNDLE_DIR}/"
 
 log "Importing image archives on target VM"
 import_cmd="bash /opt/k8s-data-platform/scripts/import_offline_bundle.sh --bundle-dir '${REMOTE_BUNDLE_DIR}' --env '${ENVIRONMENT}'"
+import_cmd="${import_cmd} --image-registry '${IMAGE_REGISTRY}' --image-namespace '${IMAGE_NAMESPACE}' --image-tag '${IMAGE_TAG}'"
 if [[ "${APPLY_MANIFESTS}" == "1" ]]; then
   import_cmd="${import_cmd} --apply"
 fi

@@ -4,10 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="${OUTPUT_DIR:-${ROOT_DIR}/docs/screenshots}"
 PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.58.2-jammy}"
+PLAYWRIGHT_NPM_PACKAGE="${PLAYWRIGHT_NPM_PACKAGE:-playwright@1.58.2}"
 DRY_RUN=0
 ENV_VARS=(
   CAPTURE_TARGETS
   PLAYWRIGHT_IMAGE
+  PLAYWRIGHT_NPM_PACKAGE
   FRONTEND_URL
   BACKEND_URL
   AIRFLOW_URL
@@ -108,4 +110,4 @@ run_cmd docker run --rm \
   -e "OUTPUT_DIR=${CONTAINER_OUTPUT_DIR}" \
   "${DOCKER_ENV_ARGS[@]}" \
   "${PLAYWRIGHT_IMAGE}" \
-  bash -lc 'created_link=0; if [[ ! -e /workspace/node_modules && -d /opt/playwright-runner/node_modules ]]; then ln -s /opt/playwright-runner/node_modules /workspace/node_modules; created_link=1; fi; node scripts/playwright/capture.mjs; status=$?; if [[ "${created_link}" == "1" ]]; then rm -f /workspace/node_modules; fi; exit "${status}"'
+  bash -lc 'set -euo pipefail; created_link=0; temp_runner=""; module_dir=""; if [[ -d /opt/playwright-runner/node_modules/playwright ]]; then module_dir="/opt/playwright-runner/node_modules"; elif [[ -d /usr/lib/node_modules/playwright ]]; then module_dir="/usr/lib/node_modules"; else temp_runner="/tmp/playwright-runner"; rm -rf "${temp_runner}"; mkdir -p "${temp_runner}"; npm install --prefix "${temp_runner}" --no-save "${PLAYWRIGHT_NPM_PACKAGE}"; module_dir="${temp_runner}/node_modules"; fi; if [[ ! -e /workspace/node_modules && -n "${module_dir}" ]]; then ln -s "${module_dir}" /workspace/node_modules; created_link=1; fi; node scripts/playwright/capture.mjs; status=$?; if [[ "${created_link}" == "1" ]]; then rm -f /workspace/node_modules; fi; if [[ -n "${temp_runner}" ]]; then rm -rf "${temp_runner}"; fi; exit "${status}"'

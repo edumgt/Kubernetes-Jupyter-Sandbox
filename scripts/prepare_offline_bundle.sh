@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist/offline-bundle}"
+# shellcheck source=scripts/lib/image_registry.sh
+source "${ROOT_DIR}/scripts/lib/image_registry.sh"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-edumgt}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_ARCHIVE_DIR="${IMAGE_ARCHIVE_DIR:-${ROOT_DIR}/.tmp-k8s-images}"
@@ -15,7 +17,8 @@ Usage: bash scripts/prepare_offline_bundle.sh [options]
 
 Options:
   --out-dir <path>            Output directory for the offline bundle.
-  --namespace <name>          Docker Hub namespace used for mirrored images. Defaults to edumgt.
+  --registry <host>           Registry host for mirrored images. Defaults to harbor.local.
+  --namespace <name>          Registry namespace/project used for mirrored images. Defaults to data-platform.
   --tag <tag>                 Platform app image tag. Defaults to latest.
   --image-archive-dir <path>  Existing image archive directory to reuse with --skip-images.
   --skip-images               Reuse existing image archives and only refresh caches and k8s assets.
@@ -186,6 +189,11 @@ while [[ $# -gt 0 ]]; do
       IMAGE_NAMESPACE="$2"
       shift 2
       ;;
+    --registry)
+      [[ $# -ge 2 ]] || die "--registry requires a value"
+      IMAGE_REGISTRY="$2"
+      shift 2
+      ;;
     --tag)
       [[ $# -ge 2 ]] || die "--tag requires a value"
       IMAGE_TAG="$2"
@@ -225,7 +233,7 @@ fi
 run_cmd mkdir -p "${OUT_DIR}" "${OUT_DIR}/images"
 
 if [[ "${SKIP_IMAGES}" != "1" ]]; then
-  run_cmd env TMP_DIR="${OUT_DIR}/images" IMAGE_NAMESPACE="${IMAGE_NAMESPACE}" IMAGE_TAG="${IMAGE_TAG}" \
+  run_cmd env TMP_DIR="${OUT_DIR}/images" IMAGE_REGISTRY="${IMAGE_REGISTRY}" IMAGE_NAMESPACE="${IMAGE_NAMESPACE}" IMAGE_TAG="${IMAGE_TAG}" \
     bash "${ROOT_DIR}/scripts/build_k8s_images.sh" --namespace "${IMAGE_NAMESPACE}" --tag "${IMAGE_TAG}" --skip-runtime-import
 else
   copy_existing_image_archives "${IMAGE_ARCHIVE_DIR}"

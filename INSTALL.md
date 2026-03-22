@@ -182,6 +182,13 @@ cat /etc/hosts
 2. Windows 호스트 어댑터를 `192.168.56.1`로 연결
 3. 그 다음 WSL 에 `192.168.56.0/24 -> <WSL 기본 게이트웨이>` 라우트 추가
 
+주의:
+
+- `192.168.56.0/24` Host-only 네트워크는 기본적으로 VM 접속용입니다.
+- 이 구성만으로는 VM 에서 외부 인터넷이 되지 않을 수 있습니다.
+- 실제로 `apt-get update`, Ubuntu mirror, Docker Hub 접근이 실패할 수 있습니다.
+- 이런 경우에는 VMware NAT 어댑터를 추가하거나, 아래 14-4 절의 오프라인 apt 번들 절차를 사용합니다.
+
 ### 8-1) VMware Host-only 네트워크 생성
 
 Windows 에서 VMware Workstation 을 관리자 권한으로 열고 `Virtual Network Editor`를 실행합니다.
@@ -419,7 +426,7 @@ bash scripts/restore_platform.sh --env dev --backup-dir <backup-dir>
 
 ## 14) 폐쇄망 대비 오프라인 이미지 사전 적재
 
-폐쇄망 또는 DNS 제약 환경에서는 `docker.io/edumgt/*` 이미지를 실시간 pull 하지 못해 GitLab, Jupyter, Airflow, ingress 등의 Pod 가 `ErrImagePull` 또는 `ImagePullBackOff` 상태가 될 수 있습니다.
+폐쇄망 또는 DNS 제약 환경에서는 외부 registry pull 이 실패하므로, 기본 운영 경로를 `harbor.local/data-platform/*` 내부 이미지 기준으로 맞추고 필요한 이미지를 preload 해야 합니다. 기존 `docker.io/edumgt/*` 미러 이미지는 번들 생성 단계의 소스 또는 과거 호환 경로로만 취급하는 것이 안전합니다.
 
 이 저장소에는 오프라인 번들 생성 및 VM preload 흐름이 포함되어 있습니다.
 
@@ -509,6 +516,42 @@ bash /opt/k8s-data-platform/scripts/check_offline_readiness.sh
 bash scripts/check_offline_readiness.sh
 ```
 
+### 14-4) VM Linux 기본 패키지 오프라인 설치
+
+VM 이 Host-only 네트워크만 사용해서 외부 `apt` 접근이 안 되는 경우, WSL 에서 Ubuntu 24.04용 `.deb` 번들을 만든 뒤 VM 3대에 복사해서 설치할 수 있습니다.
+
+준비되는 패키지 예:
+
+- Linux 운영 유틸리티
+- Python 3 / `pip` / `venv`
+- OpenJDK 17
+- `vsftpd`
+
+WSL 에서 번들 생성:
+
+```bash
+bash scripts/prepare_vm_apt_bundle.sh
+```
+
+VM 3대에 오프라인 설치:
+
+```bash
+bash scripts/install_vm_apt_bundle_to_vms.sh
+```
+
+관련 스크립트:
+
+- [scripts/prepare_vm_apt_bundle.sh](/home/Kubernetes-Jupyter-Sandbox/scripts/prepare_vm_apt_bundle.sh)
+- [scripts/install_vm_apt_bundle_to_vms.sh](/home/Kubernetes-Jupyter-Sandbox/scripts/install_vm_apt_bundle_to_vms.sh)
+- [scripts/install_vm_base_packages.sh](/home/Kubernetes-Jupyter-Sandbox/scripts/install_vm_base_packages.sh)
+
+정리:
+
+- VM 에 외부 인터넷이 되면 `bash scripts/install_vm_base_packages.sh`
+- VM 에 외부 인터넷이 안 되면
+  1. `bash scripts/prepare_vm_apt_bundle.sh`
+  2. `bash scripts/install_vm_apt_bundle_to_vms.sh`
+
 ## 15) 자주 발생하는 문제
 
 ### 15-1) 세 VM이 모두 같은 IP 를 쓰는 경우
@@ -556,7 +599,103 @@ bash scripts/check_offline_readiness.sh
 - [scripts/preload_offline_bundle_to_vm.sh](/home/Kubernetes-Jupyter-Sandbox/scripts/preload_offline_bundle_to_vm.sh) 로 control-plane VM 에 이미지 preload
 - 필요 시 worker 노드에도 동일 방식으로 preload
 
-## 16) 권장 작업 순서 요약
+## 16) 최종 OVA export 마감 절차
+
+다른 PC에 그대로 복제해서 재사용할 최종본을 만들려면, 현재 실행 중인 3대 VM 상태를 새 OVA 3개로 다시 export 해야 합니다. 이때 export 대상은 원본 OVA 파일이 아니라, 지금까지 수정이 반영된 `control-plane`, `worker-1`, `worker-2` 실행 VM 입니다.
+
+권장 마감 체크리스트:
+
+1. 주요 웹 서비스 응답 확인
+2. 오프라인 번들 preload 및 기본 패키지 설치가 끝났는지 확인
+3. 필요하면 `docs/screenshots/`에 최종 화면 캡처 저장
+4. 그 다음 `ovabuild.sh`로 3개 OVA export
+
+### 16-1) export 전 확인
+
+WSL 에서 예시:
+
+```bash
+curl -I http://192.168.56.10:30080
+curl -I http://192.168.56.10:30081/docs
+curl -I http://192.168.56.10:30088
+curl -I http://192.168.56.10:30089
+curl -I http://192.168.56.10:30090
+curl -I http://192.168.56.10:30091
+```
+
+의도한 기준:
+
+- frontend: `200 OK`
+- backend docs: `200 OK`
+- jupyter: 로그인/리다이렉트 포함 정상 응답
+- gitlab: 로그인/리다이렉트 포함 정상 응답
+- airflow: 로그인/리다이렉트 포함 정상 응답
+- nexus: `200 OK`
+
+스크린샷도 같이 남기려면:
+
+```bash
+bash scripts/capture_k8s_screenshots.sh
+```
+
+캡처 파일은 보통 `docs/screenshots/*-YYYYMMDDHHMM.png` 형태로 저장됩니다.
+
+### 16-2) 최종 OVA 3개 export
+
+루트의 [ovabuild.sh](/home/Kubernetes-Jupyter-Sandbox/ovabuild.sh) 를 사용합니다.
+
+```bash
+bash ./ovabuild.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --control-plane-ip 192.168.56.10 \
+  --ingress-lb-ip 192.168.56.240 \
+  --dist-dir C:/ffmpeg
+```
+
+설명:
+
+- 기본적으로 현재 VM/Kubernetes/web 상태를 먼저 pre-check 합니다.
+- 그 다음 3대 VM 전원을 내리고 role 별 OVA 를 export 합니다.
+- 마지막에 SHA256 manifest 를 생성해 다른 PC 복사 후 무결성 검증에 사용할 수 있습니다.
+
+pre-check 없이 바로 export 하려면:
+
+```bash
+bash ./ovabuild.sh \
+  --vars-file packer/variables.vmware.auto.pkrvars.hcl \
+  --dist-dir C:/ffmpeg \
+  --skip-precheck
+```
+
+### 16-3) export 산출물 예시
+
+예상 결과:
+
+- `C:\ffmpeg\k8s-data-platform.ova`
+- `C:\ffmpeg\k8s-worker-1.ova`
+- `C:\ffmpeg\k8s-worker-2.ova`
+- `C:\ffmpeg\SHA256SUMS.txt`
+
+이 파일들을 다른 PC로 복사한 뒤, 이 문서의 2절부터 다시 진행하면 됩니다.
+
+### 16-4) 다른 PC에서 재사용 시 기억할 점
+
+OVA 에 이미 반영되는 것:
+
+- VM 내부 기본 패키지
+- Kubernetes 및 플랫폼 구성
+- preload 된 플랫폼 이미지/오프라인 번들
+- Harbor-first / air-gap 운영 기준 기본값
+
+다른 PC마다 다시 맞춰야 하는 것:
+
+- VMware Host-only 네트워크
+- `192.168.56.10/11/12` 고정 IP
+- WSL route
+- WSL/Windows `hosts`
+- 필요 시 `bash ./start.sh ... --always-provision` 또는 `bash ./init.sh --run-start -- --skip-export`
+
+## 17) 권장 작업 순서 요약
 
 1. OVA 를 다른 PC로 복사
 2. VMware 에 3개 VM으로 import
@@ -568,6 +707,7 @@ bash scripts/check_offline_readiness.sh
 8. WSL `/etc/hosts` 에 `192.168.56.240 platform.local ...` 등록
 9. Windows `hosts` 파일에도 같은 내용 등록
 10. 브라우저에서 `platform.local`, `gitlab.platform.local`, `nexus.platform.local` 확인
+11. 검증이 끝난 VM 상태를 `bash ./ovabuild.sh ...` 로 최종 OVA 3개 export
 
 `init.sh` 기준 빠른 실행 예시:
 

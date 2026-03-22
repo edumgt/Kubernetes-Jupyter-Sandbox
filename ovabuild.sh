@@ -226,6 +226,7 @@ if [[ "${SKIP_PRECHECK}" -eq 0 ]]; then
     --ssh-port "${SSH_PORT}"
     --wait-vm-ip-timeout-sec "${WAIT_VM_IP_TIMEOUT_SEC}"
     --powershell-bin "${POWERSHELL_BIN}"
+    --skip-gitlab-clone-check
   )
   if [[ -n "${CONTROL_PLANE_IP}" ]]; then
     precheck_cmd+=(--control-plane-ip "${CONTROL_PLANE_IP}")

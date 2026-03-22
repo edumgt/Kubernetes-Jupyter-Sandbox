@@ -29,12 +29,30 @@ spec:
         - name: airflow
           image: docker.io/edumgt/k8s-data-platform-airflow:latest
           imagePullPolicy: IfNotPresent
-          command: ["bash", "-lc", "airflow standalone"]
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              airflow db migrate
+              airflow users create \
+                --username "${_AIRFLOW_WWW_USER_USERNAME}" \
+                --password "${_AIRFLOW_WWW_USER_PASSWORD}" \
+                --firstname Platform \
+                --lastname Admin \
+                --role Admin \
+                --email "${_AIRFLOW_WWW_USER_EMAIL}" || true
+              airflow scheduler >/tmp/airflow-scheduler.log 2>&1 &
+              exec airflow webserver --hostname 0.0.0.0 --port 8080
           ports:
             - containerPort: 8080
           env:
             - name: AIRFLOW__CORE__LOAD_EXAMPLES
               value: "false"
+            - name: AIRFLOW__WEBSERVER__WEB_SERVER_HOST
+              value: "0.0.0.0"
+            - name: AIRFLOW__WEBSERVER__WEB_SERVER_PORT
+              value: "8080"
             - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
               value: "true"
             - name: _AIRFLOW_WWW_USER_USERNAME

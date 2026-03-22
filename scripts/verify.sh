@@ -9,7 +9,7 @@ ENVIRONMENT="dev"
 HTTP_MODE="ingress"
 TARGET_HOST="${TARGET_HOST:-}"
 LB_IP="${LB_IP:-}"
-HTTP_TIMEOUT=5
+HTTP_TIMEOUT=10
 SKIP_HTTP=0
 
 usage() {
@@ -24,7 +24,7 @@ Options:
                                Defaults to 127.0.0.1 in nodeport mode.
   --lb-ip <ip>                 Force ingress checks through this IP with Host headers.
                                Useful before hosts file is configured.
-  --http-timeout <n>           curl timeout in seconds. Defaults to 5.
+  --http-timeout <n>           curl timeout in seconds. Defaults to 10.
   --skip-http                  Skip endpoint checks.
   -h, --help                   Show this help.
 USAGE

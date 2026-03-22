@@ -5,20 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/lib/kubernetes_runtime.sh
 source "${SCRIPT_DIR}/lib/kubernetes_runtime.sh"
+# shellcheck source=scripts/lib/image_registry.sh
+source "${SCRIPT_DIR}/lib/image_registry.sh"
 TMP_DIR="${TMP_DIR:-${ROOT_DIR}/.tmp-k8s-images}"
 DRY_RUN=0
 PUSH_IMAGES=0
 LOAD_RUNTIME=1
 INCLUDE_SUPPORT_IMAGES=1
-IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-edumgt}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
 
 usage() {
   cat <<'EOF'
 Usage: bash scripts/build_k8s_images.sh [options]
 
 Options:
-  --namespace <name>      Docker Hub namespace. Defaults to edumgt.
+  --registry <host>       Registry host. Defaults to harbor.local.
+  --namespace <name>      Registry namespace/project. Defaults to data-platform.
   --tag <tag>             Tag to apply to platform app images. Defaults to latest.
   --push                  Push mirrored support images and built app images with the current docker login.
   --skip-runtime-import   Skip importing the saved archives into the local Kubernetes container runtime cache.
@@ -113,6 +114,11 @@ while [[ $# -gt 0 ]]; do
       IMAGE_NAMESPACE="$2"
       shift 2
       ;;
+    --registry)
+      [[ $# -ge 2 ]] || die "--registry requires a value"
+      IMAGE_REGISTRY="$2"
+      shift 2
+      ;;
     --tag)
       [[ $# -ge 2 ]] || die "--tag requires a value"
       IMAGE_TAG="$2"
@@ -152,34 +158,34 @@ fi
 run_cmd mkdir -p "${TMP_DIR}"
 
 SUPPORT_IMAGES=(
-  "python:3.12-slim|docker.io/${IMAGE_NAMESPACE}/platform-python:3.12-slim"
-  "python:3.12|docker.io/${IMAGE_NAMESPACE}/platform-python:3.12"
-  "node:22.22.0-bookworm-slim|docker.io/${IMAGE_NAMESPACE}/platform-node:22.22.0-bookworm-slim"
-  "nginx:1.27-alpine|docker.io/${IMAGE_NAMESPACE}/platform-nginx:1.27-alpine"
-  "apache/airflow:2.10.5-python3.12|docker.io/${IMAGE_NAMESPACE}/platform-airflow-base:2.10.5-python3.12"
-  "mongo:7.0|docker.io/${IMAGE_NAMESPACE}/platform-mongodb:7.0"
-  "redis:7-alpine|docker.io/${IMAGE_NAMESPACE}/platform-redis:7-alpine"
-  "gitlab/gitlab-ce:17.10.0-ce.0|docker.io/${IMAGE_NAMESPACE}/platform-gitlab-ce:17.10.0-ce.0"
-  "gitlab/gitlab-runner:alpine-v17.10.0|docker.io/${IMAGE_NAMESPACE}/platform-gitlab-runner:alpine-v17.10.0"
-  "sonatype/nexus3:3.90.1-alpine|docker.io/${IMAGE_NAMESPACE}/platform-nexus3:3.90.1-alpine"
-  "gcr.io/kaniko-project/executor:v1.23.2-debug|docker.io/${IMAGE_NAMESPACE}/platform-kaniko-executor:v1.23.2-debug"
-  "bitnami/kubectl:latest|docker.io/${IMAGE_NAMESPACE}/platform-kubectl:latest"
-  "bash:5.2|docker.io/${IMAGE_NAMESPACE}/platform-bash:5.2"
-  "alpine:3.20|docker.io/${IMAGE_NAMESPACE}/platform-alpine:3.20"
-  "busybox:1.36|docker.io/${IMAGE_NAMESPACE}/platform-busybox:1.36"
-  "ghcr.io/flannel-io/flannel:v0.28.1|docker.io/${IMAGE_NAMESPACE}/platform-flannel:v0.28.1"
-  "ghcr.io/flannel-io/flannel-cni-plugin:v1.9.0-flannel1|docker.io/${IMAGE_NAMESPACE}/platform-flannel-cni-plugin:v1.9.0-flannel1"
-  "quay.io/metallb/controller:v0.14.8|docker.io/${IMAGE_NAMESPACE}/platform-metallb-controller:v0.14.8"
-  "quay.io/metallb/speaker:v0.14.8|docker.io/${IMAGE_NAMESPACE}/platform-metallb-speaker:v0.14.8"
-  "registry.k8s.io/ingress-nginx/controller:v1.12.2|docker.io/${IMAGE_NAMESPACE}/platform-ingress-nginx-controller:v1.12.2"
-  "registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.3|docker.io/${IMAGE_NAMESPACE}/platform-ingress-nginx-kube-webhook-certgen:v1.5.3"
+  "python:3.12-slim|$(platform_support_image platform-python 3.12-slim)"
+  "python:3.12|$(platform_support_image platform-python 3.12)"
+  "node:22.22.0-bookworm-slim|$(platform_support_image platform-node 22.22.0-bookworm-slim)"
+  "nginx:1.27-alpine|$(platform_support_image platform-nginx 1.27-alpine)"
+  "apache/airflow:2.10.5-python3.12|$(platform_support_image platform-airflow-base 2.10.5-python3.12)"
+  "mongo:7.0|$(platform_support_image platform-mongodb 7.0)"
+  "redis:7-alpine|$(platform_support_image platform-redis 7-alpine)"
+  "gitlab/gitlab-ce:17.10.0-ce.0|$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
+  "gitlab/gitlab-runner:alpine-v17.10.0|$(platform_support_image platform-gitlab-runner alpine-v17.10.0)"
+  "sonatype/nexus3:3.90.1-alpine|$(platform_support_image platform-nexus3 3.90.1-alpine)"
+  "gcr.io/kaniko-project/executor:v1.23.2-debug|$(platform_support_image platform-kaniko-executor v1.23.2-debug)"
+  "bitnami/kubectl:latest|$(platform_support_image platform-kubectl latest)"
+  "bash:5.2|$(platform_support_image platform-bash 5.2)"
+  "alpine:3.20|$(platform_support_image platform-alpine 3.20)"
+  "busybox:1.36|$(platform_support_image platform-busybox 1.36)"
+  "ghcr.io/flannel-io/flannel:v0.28.1|$(platform_support_image platform-flannel v0.28.1)"
+  "ghcr.io/flannel-io/flannel-cni-plugin:v1.9.0-flannel1|$(platform_support_image platform-flannel-cni-plugin v1.9.0-flannel1)"
+  "quay.io/metallb/controller:v0.14.8|$(platform_support_image platform-metallb-controller v0.14.8)"
+  "quay.io/metallb/speaker:v0.14.8|$(platform_support_image platform-metallb-speaker v0.14.8)"
+  "registry.k8s.io/ingress-nginx/controller:v1.12.2|$(platform_support_image platform-ingress-nginx-controller v1.12.2)"
+  "registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.3|$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.5.3)"
 )
 
 PLATFORM_IMAGES=(
-  "backend|apps/backend|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-backend:${IMAGE_TAG}|"
-  "frontend|apps/frontend|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-frontend:${IMAGE_TAG}|"
-  "airflow|apps/airflow|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-airflow:${IMAGE_TAG}|"
-  "jupyter|apps/jupyter|docker.io/${IMAGE_NAMESPACE}/k8s-data-platform-jupyter:${IMAGE_TAG}|"
+  "backend|apps/backend|$(platform_app_image backend)|"
+  "frontend|apps/frontend|$(platform_app_image frontend)|"
+  "airflow|apps/airflow|$(platform_app_image airflow)|"
+  "jupyter|apps/jupyter|$(platform_app_image jupyter)|"
 )
 
 if [[ "${INCLUDE_SUPPORT_IMAGES}" == "1" ]]; then

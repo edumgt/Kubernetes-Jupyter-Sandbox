@@ -157,7 +157,7 @@ async function captureJupyter(browser) {
   const page = await createPage(browser, 1024);
   await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 240000 });
   await page.getByLabel("Password or token").fill("platform123");
-  await page.getByRole("button", { name: /log in/i }).click();
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
   await page.waitForURL(/lab/, { timeout: 240000 });
   await page.waitForLoadState("networkidle", { timeout: 240000 }).catch(() => {});
   await page.screenshot({ path: outputPath("jupyter-lab.png"), fullPage: true });

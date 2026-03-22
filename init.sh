@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WSL_HOSTS_FILE="/etc/hosts"
 WINDOWS_HOSTS_FILE_WIN='C:\Windows\System32\drivers\etc\hosts'
+PACKER_VARS="${PACKER_VARS:-${ROOT_DIR}/packer/variables.vmware.auto.pkrvars.hcl}"
+OVA_DIR="${OVA_DIR:-C:/ffmpeg}"
+OVFTOOL_WIN="${OVFTOOL_WIN:-}"
+VMWARE_OUTPUT_DIR_WIN="${VMWARE_OUTPUT_DIR_WIN:-}"
 
 CONTROL_PLANE_HOSTNAME="${CONTROL_PLANE_HOSTNAME:-k8s-data-platform}"
 WORKER1_HOSTNAME="${WORKER1_HOSTNAME:-k8s-worker-1}"
@@ -22,10 +26,12 @@ WSL_ROUTE_GATEWAY="${WSL_ROUTE_GATEWAY:-}"
 BUNDLE_DIR="${BUNDLE_DIR:-${ROOT_DIR}/dist/offline-bundle}"
 REMOTE_BUNDLE_DIR="${REMOTE_BUNDLE_DIR:-/opt/k8s-data-platform/offline-bundle}"
 OFFLINE_ENV="${OFFLINE_ENV:-dev}"
-OFFLINE_NAMESPACE="${OFFLINE_NAMESPACE:-edumgt}"
+OFFLINE_REGISTRY="${OFFLINE_REGISTRY:-harbor.local}"
+OFFLINE_NAMESPACE="${OFFLINE_NAMESPACE:-data-platform}"
 OFFLINE_TAG="${OFFLINE_TAG:-latest}"
 
 HOSTS_DOMAIN_LINE=""
+RUN_STAGE_IMPORT=0
 RUN_STAGE_VM_COMMANDS=0
 RUN_STAGE_WSL_ROUTE=0
 RUN_STAGE_WSL_HOSTS=0
@@ -33,6 +39,7 @@ RUN_STAGE_WINDOWS_HOSTS=0
 RUN_STAGE_PRELOAD=0
 RUN_STAGE_START=0
 PRINT_ONLY=0
+FORCE_IMPORT_OVA=0
 PRELOAD_SKIP_BUILD=0
 PRELOAD_APPLY=0
 PRELOAD_WITH_RUNNER=0
@@ -43,14 +50,20 @@ usage() {
 Usage: bash init.sh [options] [-- <extra start.sh args>]
 
 init.sh helps with the post-import VMware OVA workflow:
-  1) Print the exact per-VM commands for static IP + hostname setup
-  2) Add a WSL route for 192.168.56.0/24 via the Windows/WSL gateway
-  3) Preload an offline bundle into the control-plane VM
-  4) Update WSL /etc/hosts for ingress domains
-  5) Update Windows hosts file for ingress domains
-  6) Run start.sh with the recommended static-network arguments
+  1) Import 3 OVA files into VMware Workstation output paths
+  2) Print the exact per-VM commands for static IP + hostname setup
+  3) Add a WSL route for 192.168.56.0/24 via the Windows/WSL gateway
+  4) Preload an offline bundle into the control-plane VM
+  5) Update WSL /etc/hosts for ingress domains
+  6) Update Windows hosts file for ingress domains
+  7) Run start.sh with the recommended static-network arguments
 
 Important:
+  - OVA import is optional but recommended on a fresh PC.
+  - By default init.sh imports these files from the OVA dir:
+      k8s-data-platform.ova
+      k8s-worker-1.ova
+      k8s-worker-2.ova
   - If the 3 imported VMs currently share the same IP, you must first log into
     each VM console separately in VMware and run the printed commands.
   - init.sh cannot safely change 3 different VMs remotely while they all answer
@@ -68,30 +81,38 @@ Options:
   --net-interface IFACE       Optional net interface for VM static IP script
   --ingress-lb-ip IP          Default: 192.168.56.240
   --metallb-range RANGE       Default: 192.168.56.240-192.168.56.250
+  --vars-file PATH            Default: packer/variables.vmware.auto.pkrvars.hcl
+  --ova-dir PATH              Default: C:/ffmpeg
+  --vmware-output-dir PATH    Override VMware import/output dir
+  --ovftool PATH              Override ovftool.exe Windows path
   --wsl-hosts-file PATH       Default: /etc/hosts
   --wsl-route-gateway IP      Override WSL route gateway
                                Default: current WSL default gateway
   --bundle-dir PATH           Offline bundle directory for preload
   --remote-bundle-dir PATH    Remote bundle directory on the VM
   --offline-env dev|prod      Overlay env for preload/import (default: dev)
-  --offline-namespace NAME    Image namespace for bundle build (default: edumgt)
+  --offline-registry HOST     Image registry for bundle build/import (default: harbor.local)
+  --offline-namespace NAME    Image namespace for bundle build (default: data-platform)
   --offline-tag TAG           App image tag for bundle build (default: latest)
   --preload-skip-build        Reuse an existing offline bundle
   --preload-apply             Apply bundled manifests after preload
   --preload-with-runner       Apply runner overlay too with preload
 
 Stages:
+  --import-ova                Import k8s-data-platform / worker1 / worker2 OVA files
   --vm-commands               Print per-VM commands only
   --apply-wsl-route           Add/replace WSL route for 192.168.56.0/24
   --preload-offline-bundle    Build/reuse and copy the offline bundle to the control-plane VM
   --apply-wsl-hosts           Update WSL hosts file
   --apply-windows-hosts       Update Windows hosts file via powershell.exe
   --run-start                 Run start.sh with --always-provision
-  --all                       Run vm-commands + WSL route + preload + WSL hosts + Windows hosts + start.sh
+  --all                       Run import + vm-commands + WSL route + preload + WSL hosts + Windows hosts + start.sh
+  --force-import-ova          Re-import even if destination VMX already exists
   --print-only                Print actions without applying local changes
   -h, --help                  Show this help
 
 Examples:
+  bash init.sh --import-ova
   bash init.sh --vm-commands
   bash init.sh --apply-wsl-route
   bash init.sh --preload-offline-bundle --preload-skip-build
@@ -124,8 +145,117 @@ build_domain_line() {
   printf '%s %s\n' "${INGRESS_LB_IP}" "platform.local jupyter.platform.local gitlab.platform.local airflow.platform.local nexus.platform.local"
 }
 
+read_optional_packer_var() {
+  local key="$1"
+  local value
+
+  [[ -f "${PACKER_VARS}" ]] || return 1
+
+  value="$(
+    awk -F '=' -v search_key="${key}" '
+      $1 ~ "^[[:space:]]*" search_key "[[:space:]]*$" {
+        sub(/^[[:space:]]+/, "", $2)
+        sub(/[[:space:]]+$/, "", $2)
+        gsub(/^"/, "", $2)
+        gsub(/"$/, "", $2)
+        print $2
+        exit
+      }
+    ' "${PACKER_VARS}"
+  )"
+
+  [[ -n "${value}" ]] || return 1
+  printf '%s' "${value}"
+}
+
 discover_wsl_default_gateway() {
   ip route | awk '/^default / {print $3; exit}'
+}
+
+resolve_import_settings() {
+  if [[ -z "${VMWARE_OUTPUT_DIR_WIN}" ]]; then
+    VMWARE_OUTPUT_DIR_WIN="$(read_optional_packer_var output_directory || true)"
+  fi
+  if [[ -z "${VMWARE_OUTPUT_DIR_WIN}" ]]; then
+    VMWARE_OUTPUT_DIR_WIN="${OVA_DIR%/}/output-k8s-data-platform-vmware"
+  fi
+
+  if [[ -z "${OVFTOOL_WIN}" ]]; then
+    OVFTOOL_WIN="$(read_optional_packer_var ovftool_path_windows || true)"
+  fi
+  if [[ -z "${OVFTOOL_WIN}" ]]; then
+    OVFTOOL_WIN='C:/Program Files (x86)/VMware/VMware Workstation/OVFTool/ovftool.exe'
+  fi
+}
+
+run_import_ova() {
+  local ova_dir_unix output_dir_unix
+  local cp_ova_unix w1_ova_unix w2_ova_unix
+  local cp_vmx_win cp_vmx_unix w1_vmx_win w1_vmx_unix w2_vmx_win w2_vmx_unix
+
+  resolve_import_settings
+
+  ova_dir_unix="$(to_unix_path "${OVA_DIR}")"
+  output_dir_unix="$(to_unix_path "${VMWARE_OUTPUT_DIR_WIN}")"
+
+  cp_ova_unix="${ova_dir_unix}/${CONTROL_PLANE_HOSTNAME}.ova"
+  w1_ova_unix="${ova_dir_unix}/${WORKER1_HOSTNAME}.ova"
+  w2_ova_unix="${ova_dir_unix}/${WORKER2_HOSTNAME}.ova"
+
+  [[ -f "${cp_ova_unix}" ]] || die "Missing control-plane OVA: ${cp_ova_unix}"
+  [[ -f "${w1_ova_unix}" ]] || die "Missing worker1 OVA: ${w1_ova_unix}"
+  [[ -f "${w2_ova_unix}" ]] || die "Missing worker2 OVA: ${w2_ova_unix}"
+
+  cp_vmx_win="${VMWARE_OUTPUT_DIR_WIN%/}/${CONTROL_PLANE_HOSTNAME}.vmx"
+  cp_vmx_unix="${output_dir_unix}/${CONTROL_PLANE_HOSTNAME}.vmx"
+  w1_vmx_win="${VMWARE_OUTPUT_DIR_WIN%/}/${WORKER1_HOSTNAME}/${WORKER1_HOSTNAME}.vmx"
+  w1_vmx_unix="${output_dir_unix}/${WORKER1_HOSTNAME}/${WORKER1_HOSTNAME}.vmx"
+  w2_vmx_win="${VMWARE_OUTPUT_DIR_WIN%/}/${WORKER2_HOSTNAME}/${WORKER2_HOSTNAME}.vmx"
+  w2_vmx_unix="${output_dir_unix}/${WORKER2_HOSTNAME}/${WORKER2_HOSTNAME}.vmx"
+
+  if [[ "${FORCE_IMPORT_OVA}" -ne 1 ]]; then
+    if [[ -f "${cp_vmx_unix}" && -f "${w1_vmx_unix}" && -f "${w2_vmx_unix}" ]]; then
+      log "Existing imported VMX set detected. Skipping OVA import."
+      return 0
+    fi
+  fi
+
+  if [[ "${PRINT_ONLY}" -eq 1 ]]; then
+    log "Would import OVA files from ${OVA_DIR} into ${VMWARE_OUTPUT_DIR_WIN}"
+    log "  ${cp_ova_unix} -> ${cp_vmx_win}"
+    log "  ${w1_ova_unix} -> ${w1_vmx_win}"
+    log "  ${w2_ova_unix} -> ${w2_vmx_win}"
+    return 0
+  fi
+
+  command -v powershell.exe >/dev/null 2>&1 || die "powershell.exe is required for OVA import."
+
+  powershell.exe -NoProfile -Command "
+    \$ErrorActionPreference = 'Stop'
+    \$ovfTool = '${OVFTOOL_WIN}'
+    if (!(Test-Path -LiteralPath \$ovfTool)) { throw \"ovftool.exe not found: \$ovfTool\" }
+
+    \$jobs = @(
+      @{ Ova = '$(to_windows_path "${cp_ova_unix}")'; Dest = '${cp_vmx_win}' },
+      @{ Ova = '$(to_windows_path "${w1_ova_unix}")'; Dest = '${w1_vmx_win}' },
+      @{ Ova = '$(to_windows_path "${w2_ova_unix}")'; Dest = '${w2_vmx_win}' }
+    )
+
+    foreach (\$job in \$jobs) {
+      \$parent = Split-Path -Parent \$job.Dest
+      New-Item -ItemType Directory -Force -Path \$parent | Out-Null
+      if (${FORCE_IMPORT_OVA} -eq 1 -and (Test-Path -LiteralPath \$job.Dest)) {
+        Remove-Item -LiteralPath \$job.Dest -Force
+      }
+      & \$ovfTool --acceptAllEulas --allowExtraConfig --skipManifestCheck \$job.Ova \$job.Dest
+      if (\$LASTEXITCODE -ne 0) { throw \"ovftool import failed for \$([string]\$job.Ova)\" }
+    }
+  " >/dev/null
+
+  [[ -f "${cp_vmx_unix}" ]] || die "Control-plane VMX missing after import: ${cp_vmx_unix}"
+  [[ -f "${w1_vmx_unix}" ]] || die "Worker1 VMX missing after import: ${w1_vmx_unix}"
+  [[ -f "${w2_vmx_unix}" ]] || die "Worker2 VMX missing after import: ${w2_vmx_unix}"
+  log "Imported 3 OVA files into VMware output dir: ${VMWARE_OUTPUT_DIR_WIN}"
 }
 
 print_vm_section() {
@@ -176,6 +306,7 @@ run_preload() {
     --bundle-dir "${BUNDLE_DIR}"
     --remote-bundle-dir "${REMOTE_BUNDLE_DIR}"
     --env "${OFFLINE_ENV}"
+    --registry "${OFFLINE_REGISTRY}"
     --namespace "${OFFLINE_NAMESPACE}"
     --tag "${OFFLINE_TAG}"
   )
@@ -339,6 +470,26 @@ while [[ $# -gt 0 ]]; do
       METALLB_RANGE="$2"
       shift 2
       ;;
+    --vars-file)
+      [[ $# -ge 2 ]] || die "--vars-file requires a value"
+      PACKER_VARS="$2"
+      shift 2
+      ;;
+    --ova-dir)
+      [[ $# -ge 2 ]] || die "--ova-dir requires a value"
+      OVA_DIR="$2"
+      shift 2
+      ;;
+    --vmware-output-dir)
+      [[ $# -ge 2 ]] || die "--vmware-output-dir requires a value"
+      VMWARE_OUTPUT_DIR_WIN="$2"
+      shift 2
+      ;;
+    --ovftool)
+      [[ $# -ge 2 ]] || die "--ovftool requires a value"
+      OVFTOOL_WIN="$2"
+      shift 2
+      ;;
     --wsl-hosts-file)
       [[ $# -ge 2 ]] || die "--wsl-hosts-file requires a value"
       WSL_HOSTS_FILE="$2"
@@ -362,6 +513,11 @@ while [[ $# -gt 0 ]]; do
     --offline-env)
       [[ $# -ge 2 ]] || die "--offline-env requires a value"
       OFFLINE_ENV="$2"
+      shift 2
+      ;;
+    --offline-registry)
+      [[ $# -ge 2 ]] || die "--offline-registry requires a value"
+      OFFLINE_REGISTRY="$2"
       shift 2
       ;;
     --offline-namespace)
@@ -390,6 +546,10 @@ while [[ $# -gt 0 ]]; do
       RUN_STAGE_VM_COMMANDS=1
       shift
       ;;
+    --import-ova)
+      RUN_STAGE_IMPORT=1
+      shift
+      ;;
     --apply-wsl-route)
       RUN_STAGE_WSL_ROUTE=1
       shift
@@ -411,12 +571,17 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --all)
+      RUN_STAGE_IMPORT=1
       RUN_STAGE_VM_COMMANDS=1
       RUN_STAGE_WSL_ROUTE=1
       RUN_STAGE_PRELOAD=1
       RUN_STAGE_WSL_HOSTS=1
       RUN_STAGE_WINDOWS_HOSTS=1
       RUN_STAGE_START=1
+      shift
+      ;;
+    --force-import-ova)
+      FORCE_IMPORT_OVA=1
       shift
       ;;
     --print-only)
@@ -454,17 +619,25 @@ require_ipv4 "WSL route gateway" "${WSL_ROUTE_GATEWAY}"
 
 HOSTS_DOMAIN_LINE="$(build_domain_line)"
 
-if [[ "${RUN_STAGE_VM_COMMANDS}" -eq 0 && "${RUN_STAGE_WSL_ROUTE}" -eq 0 && "${RUN_STAGE_PRELOAD}" -eq 0 && "${RUN_STAGE_WSL_HOSTS}" -eq 0 && "${RUN_STAGE_WINDOWS_HOSTS}" -eq 0 && "${RUN_STAGE_START}" -eq 0 ]]; then
+if [[ "${RUN_STAGE_IMPORT}" -eq 0 && "${RUN_STAGE_VM_COMMANDS}" -eq 0 && "${RUN_STAGE_WSL_ROUTE}" -eq 0 && "${RUN_STAGE_PRELOAD}" -eq 0 && "${RUN_STAGE_WSL_HOSTS}" -eq 0 && "${RUN_STAGE_WINDOWS_HOSTS}" -eq 0 && "${RUN_STAGE_START}" -eq 0 ]]; then
   RUN_STAGE_VM_COMMANDS=1
 fi
+
+resolve_import_settings
 
 log "Planned node IPs"
 log "  ${CONTROL_PLANE_HOSTNAME} -> ${CONTROL_PLANE_IP}"
 log "  ${WORKER1_HOSTNAME} -> ${WORKER1_IP}"
 log "  ${WORKER2_HOSTNAME} -> ${WORKER2_IP}"
+log "OVA dir -> ${OVA_DIR}"
+log "VMware output dir -> ${VMWARE_OUTPUT_DIR_WIN}"
 log "WSL route gateway -> ${WSL_ROUTE_GATEWAY}"
 log "Offline bundle dir -> ${BUNDLE_DIR}"
 log "Ingress domains -> ${HOSTS_DOMAIN_LINE}"
+
+if [[ "${RUN_STAGE_IMPORT}" -eq 1 ]]; then
+  run_import_ova
+fi
 
 if [[ "${RUN_STAGE_VM_COMMANDS}" -eq 1 ]]; then
   print_vm_commands

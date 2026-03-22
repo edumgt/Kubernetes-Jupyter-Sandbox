@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=scripts/lib/image_registry.sh
+source "${SCRIPT_DIR}/lib/image_registry.sh"
 BUNDLE_DIR="${BUNDLE_DIR:-/opt/k8s-data-platform/offline-bundle}"
 MANIFEST_DIR_REPO="${ROOT_DIR}/offline/manifests"
 MANIFEST_DIR_BUNDLE="${BUNDLE_DIR}/k8s/manifests"
@@ -85,18 +87,18 @@ main() {
   fi
 
   if command -v ctr >/dev/null 2>&1; then
-    check_image_ref "docker.io/edumgt/platform-flannel:v0.28.1"
-    check_image_ref "docker.io/edumgt/platform-flannel-cni-plugin:v1.9.0-flannel1"
-    check_image_ref "docker.io/edumgt/platform-metallb-controller:v0.14.8"
-    check_image_ref "docker.io/edumgt/platform-metallb-speaker:v0.14.8"
-    check_image_ref "docker.io/edumgt/platform-ingress-nginx-controller:v1.12.2"
-    check_image_ref "docker.io/edumgt/platform-ingress-nginx-kube-webhook-certgen:v1.5.3"
-    check_image_ref "docker.io/edumgt/platform-gitlab-ce:17.10.0-ce.0"
-    check_image_ref "docker.io/edumgt/platform-nexus3:3.90.1-alpine"
-    check_image_ref "docker.io/edumgt/k8s-data-platform-backend:latest"
-    check_image_ref "docker.io/edumgt/k8s-data-platform-frontend:latest"
-    check_image_ref "docker.io/edumgt/k8s-data-platform-jupyter:latest"
-    check_image_ref "docker.io/edumgt/k8s-data-platform-airflow:latest"
+    check_image_ref "$(platform_support_image platform-flannel v0.28.1)"
+    check_image_ref "$(platform_support_image platform-flannel-cni-plugin v1.9.0-flannel1)"
+    check_image_ref "$(platform_support_image platform-metallb-controller v0.14.8)"
+    check_image_ref "$(platform_support_image platform-metallb-speaker v0.14.8)"
+    check_image_ref "$(platform_support_image platform-ingress-nginx-controller v1.12.2)"
+    check_image_ref "$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.5.3)"
+    check_image_ref "$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
+    check_image_ref "$(platform_support_image platform-nexus3 3.90.1-alpine)"
+    check_image_ref "$(platform_app_image backend)"
+    check_image_ref "$(platform_app_image frontend)"
+    check_image_ref "$(platform_app_image jupyter)"
+    check_image_ref "$(platform_app_image airflow)"
   else
     warn "ctr command not found; cannot verify containerd image cache"
   fi

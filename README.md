@@ -17,7 +17,7 @@
 - 사용자별 workspace 를 `PVC subPath` 로 지속화
 - workspace 를 Kaniko Job 으로 Harbor snapshot 이미지화
 - 다음 로그인 시 Harbor snapshot 이미지를 우선 선택해 재기동
-- 플랫폼 공통 이미지는 `docker.io/edumgt/*` 에서 pull
+- 플랫폼 공통 이미지는 기본값 기준 `harbor.local/data-platform/*` 에서 pull
 - OVA 내부에 Docker Engine, 기본 유틸리티, 플랫폼 이미지, 오프라인 라이브러리 번들 선탑재
 
 ## VMware 멀티노드 바로 시작 (첫 실행 스크립트)
@@ -113,7 +113,7 @@ bash scripts/check_offline_readiness.sh
 이 스크립트는 아래를 확인합니다.
 
 - repo/bundle 내부 Flannel, ingress-nginx, MetalLB 매니페스트 존재 여부
-- containerd 에 핵심 `docker.io/edumgt/*` 이미지가 preload 되어 있는지
+- containerd 에 핵심 `harbor.local/data-platform/*` 이미지가 preload 되어 있는지
 - 현재 클러스터에 `ErrImagePull` / `ImagePullBackOff`가 남아 있는지
 
 권장 순서:
@@ -294,24 +294,24 @@ sequenceDiagram
 
 ## 이미지 전략
 
-플랫폼 기본 이미지와 서드파티 런타임 이미지는 모두 `docker.io/edumgt/*` 기준으로 맞췄습니다.
+기본 운영 기준은 `harbor.local/data-platform/*` 입니다. 폐쇄망/air-gap 환경에서는 플랫폼 공통 이미지와 서드파티 런타임 이미지를 모두 내부 Harbor 기준으로 맞추고, 필요 시 오프라인 번들을 통해 control-plane 및 worker runtime 에 preload 합니다.
 
 - platform app images
-  - `docker.io/edumgt/k8s-data-platform-backend:latest`
-  - `docker.io/edumgt/k8s-data-platform-frontend:latest`
-  - `docker.io/edumgt/k8s-data-platform-airflow:latest`
-  - `docker.io/edumgt/k8s-data-platform-jupyter:latest`
+  - `harbor.local/data-platform/k8s-data-platform-backend:latest`
+  - `harbor.local/data-platform/k8s-data-platform-frontend:latest`
+  - `harbor.local/data-platform/k8s-data-platform-airflow:latest`
+  - `harbor.local/data-platform/k8s-data-platform-jupyter:latest`
 - mirrored runtime/base images
-  - `docker.io/edumgt/platform-python:*`
-  - `docker.io/edumgt/platform-node:*`
-  - `docker.io/edumgt/platform-nginx:*`
-  - `docker.io/edumgt/platform-mongodb:*`
-  - `docker.io/edumgt/platform-redis:*`
-  - `docker.io/edumgt/platform-gitlab-ce:*`
-  - `docker.io/edumgt/platform-gitlab-runner:*`
-  - `docker.io/edumgt/platform-kaniko-executor:*`
+  - `harbor.local/data-platform/platform-python:*`
+  - `harbor.local/data-platform/platform-node:*`
+  - `harbor.local/data-platform/platform-nginx:*`
+  - `harbor.local/data-platform/platform-mongodb:*`
+  - `harbor.local/data-platform/platform-redis:*`
+  - `harbor.local/data-platform/platform-gitlab-ce:*`
+  - `harbor.local/data-platform/platform-gitlab-runner:*`
+  - `harbor.local/data-platform/platform-kaniko-executor:*`
 
-Harbor 는 플랫폼 공통 이미지 레지스트리가 아니라 `per-user Jupyter snapshot registry` 로만 사용합니다. Docker Hub `edumgt/*` 로 push 한 app/runtime 이미지를 Harbor 에 1:1 동기화하는 구조는 현재 포함되어 있지 않고, 대신 폐쇄망 패키지 저장소는 Nexus 를 추가했습니다.
+과거 `docker.io/edumgt/*` 경로는 번들 생성 소스 또는 호환용 미러 경로로만 취급하는 것이 안전합니다. 최종 배포/재사용 기준 YAML 과 preload 흐름은 Harbor-first 로 정리하는 것을 권장합니다.
 
 ## 빠른 시작 (VMware 기반 권장)
 

@@ -117,6 +117,14 @@ def healthz() -> dict[str, object]:
     }
 
 
+@app.get("/livez")
+def livez() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "backend_version": BACKEND_APP_VERSION,
+    }
+
+
 @app.get("/api/notebooks")
 def notebooks() -> dict[str, list[str]]:
     settings = get_settings()
