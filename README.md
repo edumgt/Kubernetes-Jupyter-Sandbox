@@ -24,6 +24,12 @@
 
 control-plane 1대 + worker 2대를 **가장 먼저 자동으로 올릴 때**는 아래 스크립트를 먼저 실행합니다.
 
+#### packer 설치
+
+```powershell
+winget install Hashicorp.Packer
+```
+
 ```bash
 bash scripts/vmware_provision_3node.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl
 ```

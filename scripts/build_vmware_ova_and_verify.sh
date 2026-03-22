@@ -151,6 +151,10 @@ to_unix_path() {
   printf '%s' "${path}"
 }
 
+normalize_win_path() {
+  printf '%s' "${1//\\//}"
+}
+
 ps_capture() {
   local command="$1"
   local attempt
@@ -202,6 +206,8 @@ ps_run() {
 }
 
 resolve_packer_exe() {
+  local from_path=""
+  local from_powershell=""
   local candidates=(
     "${PACKER_EXE_WIN}"
     "C:/Users/1/AppData/Local/Microsoft/WinGet/Links/packer.exe"
@@ -210,11 +216,27 @@ resolve_packer_exe() {
   local candidate
   local unix_candidate
 
+  if command -v packer.exe >/dev/null 2>&1; then
+    from_path="$(command -v packer.exe)"
+    if [[ -n "${from_path}" ]]; then
+      candidates=("${from_path}" "${candidates[@]}")
+    fi
+  fi
+
+  from_powershell="$(ps_capture '$p = (Get-Command packer.exe -ErrorAction SilentlyContinue).Source; if ($p) { $p }')" || true
+  from_powershell="$(trim "${from_powershell}")"
+  if [[ -n "${from_powershell}" ]]; then
+    candidates=("${from_powershell}" "${candidates[@]}")
+  fi
+
   for candidate in "${candidates[@]}"; do
     [[ -n "${candidate}" ]] || continue
+    if [[ "${candidate}" == /* ]]; then
+      candidate="$(to_windows_path "${candidate}")"
+    fi
     unix_candidate="$(to_unix_path "${candidate}")"
     if [[ -f "${unix_candidate}" ]]; then
-      PACKER_EXE_WIN="${candidate}"
+      PACKER_EXE_WIN="$(normalize_win_path "$(to_windows_path "${unix_candidate}")")"
       return 0
     fi
   done
