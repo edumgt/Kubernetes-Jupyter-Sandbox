@@ -38,11 +38,15 @@ RUN_STAGE_WSL_HOSTS=0
 RUN_STAGE_WINDOWS_HOSTS=0
 RUN_STAGE_PRELOAD=0
 RUN_STAGE_START=0
+RUN_STAGE_ALL=0
 PRINT_ONLY=0
 FORCE_IMPORT_OVA=0
 PRELOAD_SKIP_BUILD=0
 PRELOAD_APPLY=0
 PRELOAD_WITH_RUNNER=0
+PRELOAD_STAGE_EXPLICIT=0
+AIRGAP_PRELOADED=1
+PAUSE_FOR_VM_SETUP=1
 EXTRA_ARGS=()
 
 usage() {
@@ -59,6 +63,10 @@ init.sh helps with the post-import VMware OVA workflow:
   7) Run start.sh with the recommended static-network arguments
 
 Important:
+  - Default mode assumes air-gap ready OVA images:
+      * OVA already includes required images/manifests
+      * --all skips preload stage unless explicitly requested
+      * --run-start auto-adds: --skip-nexus-prime --skip-export
   - OVA import is optional but recommended on a fresh PC.
   - By default init.sh imports these files from the OVA dir:
       k8s-data-platform.ova
@@ -94,6 +102,10 @@ Options:
   --offline-registry HOST     Image registry for bundle build/import (default: harbor.local)
   --offline-namespace NAME    Image namespace for bundle build (default: data-platform)
   --offline-tag TAG           App image tag for bundle build (default: latest)
+  --airgap-preloaded          Assume OVA already has offline assets (default)
+  --legacy-preload            Legacy mode: include preload stage in --all
+  --pause-for-vm-setup        Pause before preload/start for manual VM IP setup (default)
+  --no-pause-for-vm-setup     Do not pause before preload/start
   --preload-skip-build        Reuse an existing offline bundle
   --preload-apply             Apply bundled manifests after preload
   --preload-with-runner       Apply runner overlay too with preload
@@ -106,19 +118,22 @@ Stages:
   --apply-wsl-hosts           Update WSL hosts file
   --apply-windows-hosts       Update Windows hosts file via powershell.exe
   --run-start                 Run start.sh with --always-provision
-  --all                       Run import + vm-commands + WSL route + preload + WSL hosts + Windows hosts + start.sh
+  --all                       Run import + vm-commands + WSL route + WSL hosts + Windows hosts + start.sh
+                              (preload included only in --legacy-preload mode or when --preload-offline-bundle is set)
   --force-import-ova          Re-import even if destination VMX already exists
   --print-only                Print actions without applying local changes
   -h, --help                  Show this help
 
 Examples:
+  bash init.sh --all
   bash init.sh --import-ova
   bash init.sh --vm-commands
   bash init.sh --apply-wsl-route
   bash init.sh --preload-offline-bundle --preload-skip-build
+  bash init.sh --all --legacy-preload --preload-skip-build
   bash init.sh --apply-wsl-hosts --apply-windows-hosts
   bash init.sh --run-start -- --skip-nexus-prime --skip-export
-  bash init.sh --all -- --skip-nexus-prime --skip-export
+  bash init.sh --all --no-pause-for-vm-setup
 EOF
 }
 
@@ -139,6 +154,30 @@ require_ipv4() {
   local label="$1"
   local value="$2"
   is_ipv4 "${value}" || die "${label} must be an IPv4 address: ${value}"
+}
+
+is_windows_style_path() {
+  [[ "$1" =~ ^[A-Za-z]:[\\/].* ]]
+}
+
+to_unix_path() {
+  local path="$1"
+  if is_windows_style_path "${path}"; then
+    command -v wslpath >/dev/null 2>&1 || die "wslpath is required to convert Windows paths in WSL."
+    wslpath -u "${path}"
+    return 0
+  fi
+  printf '%s' "${path}"
+}
+
+to_windows_path() {
+  local path="$1"
+  if is_windows_style_path "${path}"; then
+    printf '%s' "${path}"
+    return 0
+  fi
+  command -v wslpath >/dev/null 2>&1 || die "wslpath is required to convert Linux paths in WSL."
+  wslpath -w "${path}"
 }
 
 build_domain_line() {
@@ -229,6 +268,7 @@ run_import_ova() {
   fi
 
   command -v powershell.exe >/dev/null 2>&1 || die "powershell.exe is required for OVA import."
+  log "Starting OVA import with ovftool. This can take several minutes."
 
   powershell.exe -NoProfile -Command "
     \$ErrorActionPreference = 'Stop'
@@ -242,15 +282,19 @@ run_import_ova() {
     )
 
     foreach (\$job in \$jobs) {
+      \$startedAt = Get-Date
       \$parent = Split-Path -Parent \$job.Dest
       New-Item -ItemType Directory -Force -Path \$parent | Out-Null
       if (${FORCE_IMPORT_OVA} -eq 1 -and (Test-Path -LiteralPath \$job.Dest)) {
         Remove-Item -LiteralPath \$job.Dest -Force
       }
+      Write-Host ('[init.sh] Importing ' + \$job.Ova + ' -> ' + \$job.Dest)
       & \$ovfTool --acceptAllEulas --allowExtraConfig --skipManifestCheck \$job.Ova \$job.Dest
       if (\$LASTEXITCODE -ne 0) { throw \"ovftool import failed for \$([string]\$job.Ova)\" }
+      \$elapsedSec = [int]((Get-Date) - \$startedAt).TotalSeconds
+      Write-Host ('[init.sh] Imported ' + \$job.Ova + ' (' + \$elapsedSec + 's)')
     }
-  " >/dev/null
+  "
 
   [[ -f "${cp_vmx_unix}" ]] || die "Control-plane VMX missing after import: ${cp_vmx_unix}"
   [[ -f "${w1_vmx_unix}" ]] || die "Worker1 VMX missing after import: ${w1_vmx_unix}"
@@ -281,6 +325,41 @@ print_vm_commands() {
   print_vm_section "control-plane VM" "${CONTROL_PLANE_IP}" "${CONTROL_PLANE_HOSTNAME}"
   print_vm_section "worker-1 VM" "${WORKER1_IP}" "${WORKER1_HOSTNAME}"
   print_vm_section "worker-2 VM" "${WORKER2_IP}" "${WORKER2_HOSTNAME}"
+}
+
+array_has() {
+  local needle="$1"
+  shift
+  local item
+
+  for item in "$@"; do
+    if [[ "${item}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+pause_for_vm_setup_if_needed() {
+  if [[ "${PAUSE_FOR_VM_SETUP}" -ne 1 || "${RUN_STAGE_VM_COMMANDS}" -ne 1 ]]; then
+    return 0
+  fi
+  if [[ "${RUN_STAGE_PRELOAD}" -ne 1 && "${RUN_STAGE_START}" -ne 1 ]]; then
+    return 0
+  fi
+
+  if [[ "${PRINT_ONLY}" -eq 1 ]]; then
+    log "Would pause for manual VM static-IP/hostname setup before preload/start."
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    die "Pause for VM setup requires interactive stdin. Re-run with --no-pause-for-vm-setup after manual VM IP/hostname changes."
+  fi
+
+  log "Pause for VM setup: apply printed static-IP/hostname commands in each VM console first."
+  read -r -p "[init.sh] Press Enter after all 3 VMs have unique IP/hostname: "
 }
 
 apply_wsl_route() {
@@ -409,6 +488,14 @@ run_start() {
   if [[ -n "${NET_INTERFACE}" ]]; then
     cmd+=(--net-interface "${NET_INTERFACE}")
   fi
+  if [[ "${AIRGAP_PRELOADED}" -eq 1 ]]; then
+    if ! array_has "--skip-nexus-prime" "${EXTRA_ARGS[@]}"; then
+      cmd+=(--skip-nexus-prime)
+    fi
+    if ! array_has "--skip-export" "${EXTRA_ARGS[@]}"; then
+      cmd+=(--skip-export)
+    fi
+  fi
   if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     cmd+=("${EXTRA_ARGS[@]}")
   fi
@@ -530,6 +617,22 @@ while [[ $# -gt 0 ]]; do
       OFFLINE_TAG="$2"
       shift 2
       ;;
+    --airgap-preloaded)
+      AIRGAP_PRELOADED=1
+      shift
+      ;;
+    --legacy-preload)
+      AIRGAP_PRELOADED=0
+      shift
+      ;;
+    --pause-for-vm-setup)
+      PAUSE_FOR_VM_SETUP=1
+      shift
+      ;;
+    --no-pause-for-vm-setup)
+      PAUSE_FOR_VM_SETUP=0
+      shift
+      ;;
     --preload-skip-build)
       PRELOAD_SKIP_BUILD=1
       shift
@@ -556,6 +659,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --preload-offline-bundle)
       RUN_STAGE_PRELOAD=1
+      PRELOAD_STAGE_EXPLICIT=1
       shift
       ;;
     --apply-wsl-hosts)
@@ -571,13 +675,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --all)
-      RUN_STAGE_IMPORT=1
-      RUN_STAGE_VM_COMMANDS=1
-      RUN_STAGE_WSL_ROUTE=1
-      RUN_STAGE_PRELOAD=1
-      RUN_STAGE_WSL_HOSTS=1
-      RUN_STAGE_WINDOWS_HOSTS=1
-      RUN_STAGE_START=1
+      RUN_STAGE_ALL=1
       shift
       ;;
     --force-import-ova)
@@ -604,6 +702,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${RUN_STAGE_ALL}" -eq 1 ]]; then
+  RUN_STAGE_IMPORT=1
+  RUN_STAGE_VM_COMMANDS=1
+  RUN_STAGE_WSL_ROUTE=1
+  RUN_STAGE_WSL_HOSTS=1
+  RUN_STAGE_WINDOWS_HOSTS=1
+  RUN_STAGE_START=1
+  if [[ "${AIRGAP_PRELOADED}" -eq 1 && "${PRELOAD_STAGE_EXPLICIT}" -eq 0 ]]; then
+    RUN_STAGE_PRELOAD=0
+  else
+    RUN_STAGE_PRELOAD=1
+  fi
+fi
+
 require_ipv4 "control-plane IP" "${CONTROL_PLANE_IP}"
 require_ipv4 "worker1 IP" "${WORKER1_IP}"
 require_ipv4 "worker2 IP" "${WORKER2_IP}"
@@ -620,6 +732,7 @@ require_ipv4 "WSL route gateway" "${WSL_ROUTE_GATEWAY}"
 HOSTS_DOMAIN_LINE="$(build_domain_line)"
 
 if [[ "${RUN_STAGE_IMPORT}" -eq 0 && "${RUN_STAGE_VM_COMMANDS}" -eq 0 && "${RUN_STAGE_WSL_ROUTE}" -eq 0 && "${RUN_STAGE_PRELOAD}" -eq 0 && "${RUN_STAGE_WSL_HOSTS}" -eq 0 && "${RUN_STAGE_WINDOWS_HOSTS}" -eq 0 && "${RUN_STAGE_START}" -eq 0 ]]; then
+  log "No stage option provided. Defaulting to --vm-commands (this does not import OVA)."
   RUN_STAGE_VM_COMMANDS=1
 fi
 
@@ -634,6 +747,11 @@ log "VMware output dir -> ${VMWARE_OUTPUT_DIR_WIN}"
 log "WSL route gateway -> ${WSL_ROUTE_GATEWAY}"
 log "Offline bundle dir -> ${BUNDLE_DIR}"
 log "Ingress domains -> ${HOSTS_DOMAIN_LINE}"
+if [[ "${AIRGAP_PRELOADED}" -eq 1 ]]; then
+  log "Mode -> airgap-preloaded (no preload in --all, start adds --skip-nexus-prime --skip-export)"
+else
+  log "Mode -> legacy-preload (--all includes preload stage)"
+fi
 
 if [[ "${RUN_STAGE_IMPORT}" -eq 1 ]]; then
   run_import_ova
@@ -642,6 +760,8 @@ fi
 if [[ "${RUN_STAGE_VM_COMMANDS}" -eq 1 ]]; then
   print_vm_commands
 fi
+
+pause_for_vm_setup_if_needed
 
 if [[ "${RUN_STAGE_WSL_ROUTE}" -eq 1 ]]; then
   apply_wsl_route "${WSL_ROUTE_GATEWAY}"
