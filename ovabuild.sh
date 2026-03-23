@@ -10,6 +10,7 @@ CONTROL_PLANE_NAME="${CONTROL_PLANE_NAME:-k8s-data-platform}"
 WORKER1_NAME="${WORKER1_NAME:-k8s-worker-1}"
 WORKER2_NAME="${WORKER2_NAME:-k8s-worker-2}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
+REMOTE_HOME_REPO_ROOT="${REMOTE_HOME_REPO_ROOT:-/home/Kubernetes-Jupyter-Sandbox}"
 
 CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-}"
 INGRESS_LB_IP="${INGRESS_LB_IP:-}"
@@ -29,6 +30,8 @@ WAIT_VM_IP_TIMEOUT_SEC="${WAIT_VM_IP_TIMEOUT_SEC:-600}"
 SKIP_PRECHECK=0
 SKIP_SHA256=0
 STRICT_HARBOR_CHECK=0
+SKIP_REPO_COPY=0
+SKIP_HARBOR_IMAGE_CHECK=0
 
 log() {
   printf '[ovabuild.sh] %s\n' "$*"
@@ -45,8 +48,9 @@ Usage: bash ovabuild.sh [options]
 
 Role-specific OVA build flow for existing VMware 3-node VMs:
   1) (default) Pre-check current cluster/web endpoints with vmware_post_reboot_verify.sh
-  2) Stop each VM and export 3 OVA files (control-plane, worker-1, worker-2)
-  3) Generate SHA256 manifest for transfer/import validation
+  2) Copy repo to VM home path + run pre-export Kubernetes/Harbor checks
+  3) Stop each VM and export 3 OVA files (control-plane, worker-1, worker-2)
+  4) Generate SHA256 manifest for transfer/import validation
 
 Options:
   --vars-file PATH             Packer vars file (default: packer/variables.vmware.auto.pkrvars.hcl)
@@ -59,6 +63,7 @@ Options:
   --control-plane-ip IP        Optional static control-plane IP for pre-check
   --ingress-lb-ip IP           Optional fixed ingress LB IP for pre-check
   --remote-repo-root PATH      Default: /opt/k8s-data-platform
+  --remote-home-repo-root PATH Default: /home/Kubernetes-Jupyter-Sandbox
 
   --ssh-user USER              SSH user for pre-check (optional)
   --ssh-password PASS          SSH password for pre-check (optional)
@@ -69,6 +74,8 @@ Options:
   --skip-precheck              Skip pre-check and export immediately
   --skip-sha256                Skip SHA256 manifest generation
   --strict-harbor-check        Fail pre-check when Harbor(NodePort 30092) is unreachable
+  --skip-repo-copy             Skip repo copy to VM home path before export
+  --skip-harbor-image-check    Skip harbor image checks before export
 
   --vmrun PATH                 vmrun.exe path override
   --ovftool PATH               ovftool.exe path override
@@ -146,6 +153,11 @@ while [[ $# -gt 0 ]]; do
       REMOTE_REPO_ROOT="$2"
       shift 2
       ;;
+    --remote-home-repo-root)
+      [[ $# -ge 2 ]] || die "--remote-home-repo-root requires a value"
+      REMOTE_HOME_REPO_ROOT="$2"
+      shift 2
+      ;;
     --ssh-user)
       [[ $# -ge 2 ]] || die "--ssh-user requires a value"
       SSH_USER="$2"
@@ -183,6 +195,14 @@ while [[ $# -gt 0 ]]; do
       STRICT_HARBOR_CHECK=1
       shift
       ;;
+    --skip-repo-copy)
+      SKIP_REPO_COPY=1
+      shift
+      ;;
+    --skip-harbor-image-check)
+      SKIP_HARBOR_IMAGE_CHECK=1
+      shift
+      ;;
     --vmrun)
       [[ $# -ge 2 ]] || die "--vmrun requires a value"
       VMRUN_WIN="$2"
@@ -213,8 +233,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+CONTROL_PLANE_SSH_HOST="${CONTROL_PLANE_IP}"
+
 if [[ "${SKIP_PRECHECK}" -eq 0 ]]; then
-  log "Step 1/3: Pre-check current VM/Kubernetes/web 상태"
+  log "Step 1/4: Pre-check current VM/Kubernetes/web 상태"
   precheck_cmd=(
     bash "${ROOT_DIR}/scripts/vmware_post_reboot_verify.sh"
     --vars-file "${PACKER_VARS}"
@@ -250,12 +272,54 @@ if [[ "${SKIP_PRECHECK}" -eq 0 ]]; then
     precheck_cmd+=(--strict-harbor-check)
   fi
 
-  "${precheck_cmd[@]}"
+  precheck_log="$(mktemp)"
+  if ! "${precheck_cmd[@]}" | tee "${precheck_log}"; then
+    rm -f "${precheck_log}"
+    die "Pre-check failed."
+  fi
+  if [[ -z "${CONTROL_PLANE_SSH_HOST}" ]]; then
+    CONTROL_PLANE_SSH_HOST="$(
+      awk -F': ' '/Control-plane SSH endpoint:/ { print $NF; exit }' "${precheck_log}" | tr -d '\r'
+    )"
+  fi
+  rm -f "${precheck_log}"
 else
-  log "Step 1/3: Skipped pre-check (--skip-precheck)"
+  log "Step 1/4: Skipped pre-check (--skip-precheck)"
 fi
 
-log "Step 2/3: Exporting 3-node OVAs (VM stop included)"
+[[ -n "${CONTROL_PLANE_SSH_HOST}" ]] || die "Unable to resolve control-plane SSH endpoint. Provide --control-plane-ip or run pre-check."
+
+log "Step 2/4: Sync repo + pre-export Kubernetes/Harbor checks"
+prepare_cmd=(
+  bash "${ROOT_DIR}/scripts/vmware_pre_export_prepare.sh"
+  --vars-file "${PACKER_VARS}"
+  --control-plane-ip "${CONTROL_PLANE_SSH_HOST}"
+  --control-plane-name "${CONTROL_PLANE_NAME}"
+  --worker1-name "${WORKER1_NAME}"
+  --worker2-name "${WORKER2_NAME}"
+  --env "${ENVIRONMENT}"
+  --remote-repo-root "${REMOTE_REPO_ROOT}"
+  --remote-home-repo-root "${REMOTE_HOME_REPO_ROOT}"
+  --ssh-port "${SSH_PORT}"
+)
+if [[ -n "${SSH_USER}" ]]; then
+  prepare_cmd+=(--ssh-user "${SSH_USER}")
+fi
+if [[ -n "${SSH_PASSWORD}" ]]; then
+  prepare_cmd+=(--ssh-password "${SSH_PASSWORD}")
+fi
+if [[ -n "${SSH_KEY_PATH}" ]]; then
+  prepare_cmd+=(--ssh-key-path "${SSH_KEY_PATH}")
+fi
+if [[ "${SKIP_REPO_COPY}" -eq 1 ]]; then
+  prepare_cmd+=(--skip-repo-copy)
+fi
+if [[ "${SKIP_HARBOR_IMAGE_CHECK}" -eq 1 ]]; then
+  prepare_cmd+=(--skip-harbor-image-check)
+fi
+"${prepare_cmd[@]}"
+
+log "Step 3/4: Exporting 3-node OVAs (VM stop included)"
 export_cmd=(
   bash "${ROOT_DIR}/scripts/vmware_export_3node_ova.sh"
   --vars-file "${PACKER_VARS}"
@@ -277,7 +341,7 @@ fi
 "${export_cmd[@]}"
 
 if [[ "${SKIP_SHA256}" -eq 0 ]]; then
-  log "Step 3/3: Generating OVA SHA256 manifest"
+  log "Step 4/4: Generating OVA SHA256 manifest"
   DIST_DIR_UNIX="$(to_unix_path "${DIST_DIR}")"
   mkdir -p "${DIST_DIR_UNIX}"
 
@@ -295,7 +359,7 @@ if [[ "${SKIP_SHA256}" -eq 0 ]]; then
   )
   log "SHA256 manifest: ${manifest_path}"
 else
-  log "Step 3/3: Skipped SHA256 manifest (--skip-sha256)"
+  log "Step 4/4: Skipped SHA256 manifest (--skip-sha256)"
 fi
 
 log "Completed."
