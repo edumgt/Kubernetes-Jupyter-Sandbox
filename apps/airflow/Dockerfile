@@ -1,4 +1,4 @@
-FROM docker.io/edumgt/platform-airflow-base:2.10.5-python3.12
+FROM harbor.local/data-platform/platform-airflow-base:2.10.5-python3.12
 
 USER airflow
 

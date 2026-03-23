@@ -199,7 +199,7 @@ EOF
                         init_containers=[
                             client.V1Container(
                                 name="prepare-context",
-                                image="docker.io/edumgt/platform-busybox:1.36",
+                                image="harbor.local/data-platform/platform-busybox:1.36",
                                 command=["/bin/sh", "-c", prepare_script],
                                 volume_mounts=[
                                     client.V1VolumeMount(name="context", mount_path="/context"),

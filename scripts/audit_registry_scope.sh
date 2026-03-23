@@ -2,25 +2,34 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EXIT_CODE=0
 
-dockerhub_refs="$(rg -o 'docker\.io/edumgt/[^\" ]+' \
-  "${ROOT_DIR}/infra/k8s" \
-  "${ROOT_DIR}/apps" \
-  "${ROOT_DIR}/scripts/build_k8s_images.sh" \
-  -g '!**/node_modules/**' | sort -u)"
+RUNTIME_PATHS=(
+  "${ROOT_DIR}/infra/k8s"
+  "${ROOT_DIR}/offline/manifests"
+  "${ROOT_DIR}/apps/backend/app/config.py"
+  "${ROOT_DIR}/apps/backend/app/services/jupyter_snapshots.py"
+)
 
-harbor_image_refs="$(rg -o 'harbor\.local/[^\" ]+' \
-  "${ROOT_DIR}/infra" \
-  "${ROOT_DIR}/apps" \
-  "${ROOT_DIR}/docs" \
-  -g '!**/node_modules/**' | sort -u || true)"
+runtime_docker_refs="$(
+  rg -o 'docker\.io/[^\" ]+' "${RUNTIME_PATHS[@]}" -g '!**/node_modules/**' | sort -u || true
+)"
 
-printf 'Docker Hub image refs used by workloads/build scripts:\n%s\n\n' "${dockerhub_refs}"
-printf 'Harbor refs found in code/docs:\n%s\n\n' "${harbor_image_refs:-<none>}"
+runtime_harbor_refs="$(
+  rg -o 'harbor\.local/[^\" ]+' "${RUNTIME_PATHS[@]}" -g '!**/node_modules/**' | sort -u || true
+)"
 
-if rg -n 'image:\s*harbor\.local' "${ROOT_DIR}/infra/k8s" "${ROOT_DIR}/apps" -g '!**/node_modules/**' >/dev/null; then
-  printf 'Result: some workloads pull directly from Harbor.\n'
+printf 'Runtime Harbor refs:\n%s\n\n' "${runtime_harbor_refs:-<none>}"
+printf 'Runtime docker.io refs:\n%s\n\n' "${runtime_docker_refs:-<none>}"
+
+if [[ -n "${runtime_docker_refs}" ]]; then
+  printf 'Result: FAIL (runtime path contains docker.io refs)\n'
+  EXIT_CODE=1
+elif [[ -n "${runtime_harbor_refs}" ]]; then
+  printf 'Result: PASS (runtime path is Harbor-first)\n'
 else
-  printf 'Result: Docker Hub pushes are not mirrored 1:1 into Harbor in this repo.\n'
-  printf 'Harbor is configured for per-user Jupyter snapshot images only.\n'
+  printf 'Result: FAIL (no Harbor runtime refs found)\n'
+  EXIT_CODE=1
 fi
+
+exit "${EXIT_CODE}"

@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: airflow
-          image: docker.io/edumgt/k8s-data-platform-airflow:latest
+          image: harbor.local/data-platform/k8s-data-platform-airflow:latest
           imagePullPolicy: IfNotPresent
           command:
             - bash

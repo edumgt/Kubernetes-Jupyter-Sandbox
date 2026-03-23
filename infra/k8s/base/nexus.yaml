@@ -42,7 +42,7 @@ spec:
         fsGroup: 200
       initContainers:
         - name: prepare-nexus-workdir
-          image: docker.io/edumgt/platform-nexus3:3.90.1-alpine
+          image: harbor.local/data-platform/platform-nexus3:3.90.1-alpine
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -61,7 +61,7 @@ spec:
               mountPath: /opt/sonatype/sonatype-work/nexus3
       containers:
         - name: nexus
-          image: docker.io/edumgt/platform-nexus3:3.90.1-alpine
+          image: harbor.local/data-platform/platform-nexus3:3.90.1-alpine
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0

@@ -1,6 +1,12 @@
 # Offline Artifact Repository
 
-이 레포의 현재 구조에서 `Harbor` 는 플랫폼 공통 이미지를 미러링하는 용도가 아니라 `per-user Jupyter snapshot` 전용입니다. 즉, `docker.io/edumgt/*` 로 push 한 app/runtime 이미지는 Harbor 와 1:1 동기화되지 않습니다.
+현재 운영 원칙은 아래와 같습니다.
+
+- VM 내부 런타임(Kubernetes 배포/실행)은 `harbor.local/data-platform/*` 만 사용
+- 외부망에서의 수집/빌드 결과물은 `offline bundle` 또는 `tar` 로 반입
+- 반입한 이미지는 VM의 runtime/containerd 에 import 하여 Harbor 기준 태그로 사용
+
+즉, VM 내부 워크로드 경로에서 `docker.io` 를 직접 참조하지 않는 것이 기본입니다.
 
 ## Airflow 역할
 
@@ -15,7 +21,7 @@
 - PyPI proxy/group 으로 backend, jupyter, airflow wheel warm-up 가능
 - npm proxy/group 으로 frontend build cache warm-up 가능
 - raw hosted repository 로 offline bundle 자체를 함께 적재 가능
-- Harbor 는 기존대로 Jupyter snapshot 전용으로 유지 가능
+- Harbor 는 플랫폼 기본/runtime 이미지 + snapshot 이미지를 함께 관리 가능
 
 공식 문서:
 

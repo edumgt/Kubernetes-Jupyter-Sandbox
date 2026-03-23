@@ -109,7 +109,7 @@
       - bash
       - /opt/k8s-data-platform/scripts/build_k8s_images.sh
       - --namespace
-      - edumgt
+      - data-platform
       - --tag
       - latest
   args:

@@ -40,7 +40,7 @@ def fake_session_summary(username: str, minutes_ago: int = 1) -> dict[str, objec
         "pod_name": f"lab-{session_id}",
         "service_name": f"lab-{session_id}",
         "workspace_subpath": f"users/{session_id}",
-        "image": "docker.io/edumgt/k8s-data-platform-jupyter:latest",
+        "image": "harbor.local/data-platform/k8s-data-platform-jupyter:latest",
         "status": "ready",
         "phase": "Running",
         "ready": True,
@@ -144,7 +144,7 @@ class DemoAuthFlowTests(unittest.TestCase):
         settings = get_settings()
         script = _restore_workspace_script(
             settings,
-            "docker.io/edumgt/k8s-data-platform-jupyter:latest",
+            "harbor.local/data-platform/k8s-data-platform-jupyter:latest",
             "users/test1-test-com",
         )
 

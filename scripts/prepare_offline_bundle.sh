@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist/offline-bundle}"
 # shellcheck source=scripts/lib/image_registry.sh
 source "${ROOT_DIR}/scripts/lib/image_registry.sh"
-IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-edumgt}"
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-data-platform}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_ARCHIVE_DIR="${IMAGE_ARCHIVE_DIR:-${ROOT_DIR}/.tmp-k8s-images}"
 DRY_RUN=0

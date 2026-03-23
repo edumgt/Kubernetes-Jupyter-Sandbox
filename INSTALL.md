@@ -195,15 +195,23 @@ bash init.sh --all --legacy-preload --preload-skip-build
 
 ### 9-2) `docker.io` pull 시도가 보임
 
-원인 대부분:
+현재 기본 배포 기준은 `harbor.local/data-platform/*` 입니다.
 
-- preload 빌드 모드 사용
-- Nexus prime 단계 미skip
+점검:
 
-권장:
+```bash
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get deploy,statefulset -n data-platform-dev -o custom-columns=NAME:.metadata.name,IMAGES:.spec.template.spec.containers[*].image
+```
 
-- 기본 `bash init.sh --all` 사용 (airgap-preloaded 기본값)
-- 필요 시 명시적으로 `-- --skip-nexus-prime --skip-export` 추가
+모든 이미지가 `harbor.local/data-platform/` 로 시작해야 정상입니다.
+
+복구:
+
+```bash
+bash scripts/apply_k8s.sh --env dev --overlay dev-3node
+```
+
+위 재적용 후에도 일부 노드에서 `ImagePullBackOff`가 나면, 해당 노드 runtime 에 Harbor 태그 이미지가 없는 상태이므로 오프라인 번들 preload(또는 이미지 import)를 다시 수행하세요.
 
 ### 9-3) `Pause for VM setup requires interactive stdin` 오류
 

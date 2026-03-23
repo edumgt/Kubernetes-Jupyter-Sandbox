@@ -4,8 +4,8 @@
 : "${IMAGE_NAMESPACE:=data-platform}"
 : "${IMAGE_TAG:=latest}"
 
-DEFAULT_IMAGE_REGISTRY="docker.io"
-DEFAULT_IMAGE_NAMESPACE="edumgt"
+DEFAULT_IMAGE_REGISTRY="harbor.local"
+DEFAULT_IMAGE_NAMESPACE="data-platform"
 DEFAULT_IMAGE_TAG="latest"
 
 trim_trailing_slashes() {
@@ -45,11 +45,15 @@ registry_override_enabled() {
 rewrite_registry_prefix_in_file() {
   local source_file="$1"
   local target_file="$2"
-  local from_prefix="docker.io/${DEFAULT_IMAGE_NAMESPACE}/"
+  local default_prefix="${DEFAULT_IMAGE_REGISTRY}/${DEFAULT_IMAGE_NAMESPACE}/"
+  local legacy_prefix="docker.io/edumgt/"
   local to_prefix
 
   to_prefix="$(image_registry_prefix)/"
-  sed "s#${from_prefix}#${to_prefix}#g" "${source_file}" > "${target_file}"
+  sed \
+    -e "s#${default_prefix}#${to_prefix}#g" \
+    -e "s#${legacy_prefix}#${to_prefix}#g" \
+    "${source_file}" > "${target_file}"
 }
 
 write_platform_image_override_kustomization() {
@@ -71,43 +75,43 @@ configMapGenerator:
       - PLATFORM_JUPYTER_SNAPSHOT_BUILDER_IMAGE=$(platform_support_image platform-kaniko-executor v1.23.2-debug)
 
 images:
-  - name: docker.io/edumgt/k8s-data-platform-backend
+  - name: harbor.local/data-platform/k8s-data-platform-backend
     newName: $(image_registry_prefix)/k8s-data-platform-backend
     newTag: ${IMAGE_TAG}
-  - name: docker.io/edumgt/k8s-data-platform-frontend
+  - name: harbor.local/data-platform/k8s-data-platform-frontend
     newName: $(image_registry_prefix)/k8s-data-platform-frontend
     newTag: ${IMAGE_TAG}
-  - name: docker.io/edumgt/k8s-data-platform-airflow
+  - name: harbor.local/data-platform/k8s-data-platform-airflow
     newName: $(image_registry_prefix)/k8s-data-platform-airflow
     newTag: ${IMAGE_TAG}
-  - name: docker.io/edumgt/k8s-data-platform-jupyter
+  - name: harbor.local/data-platform/k8s-data-platform-jupyter
     newName: $(image_registry_prefix)/k8s-data-platform-jupyter
     newTag: ${IMAGE_TAG}
-  - name: docker.io/edumgt/platform-mongodb
+  - name: harbor.local/data-platform/platform-mongodb
     newName: $(image_registry_prefix)/platform-mongodb
     newTag: "7.0"
-  - name: docker.io/edumgt/platform-redis
+  - name: harbor.local/data-platform/platform-redis
     newName: $(image_registry_prefix)/platform-redis
     newTag: "7-alpine"
-  - name: docker.io/edumgt/platform-gitlab-ce
+  - name: harbor.local/data-platform/platform-gitlab-ce
     newName: $(image_registry_prefix)/platform-gitlab-ce
     newTag: "17.10.0-ce.0"
-  - name: docker.io/edumgt/platform-nexus3
+  - name: harbor.local/data-platform/platform-nexus3
     newName: $(image_registry_prefix)/platform-nexus3
     newTag: "3.90.1-alpine"
-  - name: docker.io/edumgt/platform-kaniko-executor
+  - name: harbor.local/data-platform/platform-kaniko-executor
     newName: $(image_registry_prefix)/platform-kaniko-executor
     newTag: "v1.23.2-debug"
-  - name: docker.io/edumgt/platform-gitlab-runner
+  - name: harbor.local/data-platform/platform-gitlab-runner
     newName: $(image_registry_prefix)/platform-gitlab-runner
     newTag: "alpine-v17.10.0"
-  - name: docker.io/edumgt/platform-alpine
+  - name: harbor.local/data-platform/platform-alpine
     newName: $(image_registry_prefix)/platform-alpine
     newTag: "3.20"
-  - name: docker.io/edumgt/platform-bash
+  - name: harbor.local/data-platform/platform-bash
     newName: $(image_registry_prefix)/platform-bash
     newTag: "5.2"
-  - name: docker.io/edumgt/platform-kubectl
+  - name: harbor.local/data-platform/platform-kubectl
     newName: $(image_registry_prefix)/platform-kubectl
     newTag: "latest"
 EOF

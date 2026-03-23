@@ -28,9 +28,16 @@
     - name: Ensure Nexus mirror alias exists in container runtime
       shell: |
         set -euo pipefail
-        if ! ctr -n k8s.io images ls -q | grep -Fq 'docker.io/edumgt/platform-nexus3:3.90.1-alpine'; then
-          ctr -n k8s.io images pull docker.io/sonatype/nexus3:3.90.1-alpine
-          ctr -n k8s.io images tag docker.io/sonatype/nexus3:3.90.1-alpine docker.io/edumgt/platform-nexus3:3.90.1-alpine || true
+        target='harbor.local/data-platform/platform-nexus3:3.90.1-alpine'
+        source='docker.io/sonatype/nexus3:3.90.1-alpine'
+        if ! ctr -n k8s.io images ls -q | grep -Fq "${target}"; then
+          if ctr -n k8s.io images ls -q | grep -Fq "${source}"; then
+            ctr -n k8s.io images tag "${source}" "${target}" || true
+          else
+            echo "missing required image in containerd: ${target}" >&2
+            echo "preload offline bundle or build_k8s_images before running this proof playbook" >&2
+            exit 1
+          fi
         fi
       args:
         executable: /bin/bash

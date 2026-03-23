@@ -100,7 +100,7 @@ spec:
       serviceAccountName: backend
       containers:
         - name: backend
-          image: docker.io/edumgt/k8s-data-platform-backend:latest
+          image: harbor.local/data-platform/k8s-data-platform-backend:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

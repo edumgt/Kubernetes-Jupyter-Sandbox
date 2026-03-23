@@ -1,4 +1,4 @@
-FROM docker.io/edumgt/platform-python:3.12-slim
+FROM harbor.local/data-platform/platform-python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

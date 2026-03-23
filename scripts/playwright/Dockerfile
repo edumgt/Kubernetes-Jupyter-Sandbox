@@ -1,4 +1,4 @@
-FROM docker.io/edumgt/platform-node:22.22.0-bookworm-slim
+FROM harbor.local/data-platform/platform-node:22.22.0-bookworm-slim
 
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     NODE_ENV=production \
