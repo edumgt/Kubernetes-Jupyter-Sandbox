@@ -6,15 +6,18 @@
 ## 1) 권장 읽기 순서 (VMware 멀티노드 기준)
 
 1. `README.md`
-2. `docs/vmware/README.md`
-3. `QUICKSTART.md`
-4. `INSTALL.md`
-5. `PORTS.md`
-6. `TROUBLESHOOTING.md`
-7. `CHECK.md`
-8. `CHECKLIST.md`
-9. `TODO.md`
-10. `CHANGELOG.md`
+2. `docs/phase-1-build-ova.md`
+3. `docs/phase-2-ova-solution-ops.md`
+4. `docs/phase-3-install-airgap-from-ova.md`
+5. `docs/vmware/README.md`
+6. `QUICKSTART.md`
+7. `INSTALL.md`
+8. `PORTS.md`
+9. `TROUBLESHOOTING.md`
+10. `CHECK.md`
+11. `CHECKLIST.md`
+12. `TODO.md`
+13. `CHANGELOG.md`
 
 ## 2) 루트 `.md` 파일 목적 요약
 
@@ -43,6 +46,20 @@
 - 스크립트 역할 분리: `start.sh`(구성/검증), `ovabuild.sh`(OVA export)
 - 단일 서비스 빠른 확인: `QUICKSTART.md`
 - 설치/운영 표준화: `INSTALL.md`, `CHECK.md`, `CHECKLIST.md`, `TODO.md`, `TROUBLESHOOTING.md`
+
+## 3-1) 3단계 표준 분류 (요청 반영)
+
+문서 3종:
+
+1. `docs/phase-1-build-ova.md` (최초 OVA 생성)
+2. `docs/phase-2-ova-solution-ops.md` (OVA 내부 솔루션 작업)
+3. `docs/phase-3-install-airgap-from-ova.md` (완성 OVA 복사/설치)
+
+스크립트 3종:
+
+1. `scripts/phase1_build_ova_assets.sh`
+2. `scripts/phase2_operate_airgap_cluster.sh`
+3. `scripts/phase3_install_from_completed_ova.sh`
 
 ## 4) 보조 문서(루트 외) 추천
 
