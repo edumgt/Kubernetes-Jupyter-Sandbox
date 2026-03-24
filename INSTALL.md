@@ -89,8 +89,25 @@ VMware 콘솔에서 각 VM에 로그인해 해당 명령을 실행합니다.
 예시(각 VM 공통 패턴):
 
 ```bash
-sudo bash /opt/k8s-data-platform/scripts/set_static_ip.sh --ip <각 VM IP> --prefix 24 --gateway 192.168.56.1 --dns 192.168.56.1,1.1.1.1,8.8.8.8
-sudo bash /opt/k8s-data-platform/scripts/set_hostname_hosts.sh --hostname <각 VM host> --entry "192.168.56.10 k8s-data-platform" --entry "192.168.56.11 k8s-worker-1" --entry "192.168.56.12 k8s-worker-2"
+sudo bash /opt/k8s-data-platform/scripts/set_static_ip.sh --ip 192.168.56.10 --prefix 24 --gateway 192.168.56.1 --dns 192.168.56.1,1.1.1.1,8.8.8.8
+sudo bash /opt/k8s-data-platform/scripts/set_hostname_hosts.sh --hostname k8s-data-platform --entry "192.168.56.10 k8s-data-platform" --entry "192.168.56.11 k8s-worker-1" --entry "192.168.56.12 k8s-worker-2"
+hostname
+hostname -I
+ip route
+```
+
+
+```bash
+sudo bash /opt/k8s-data-platform/scripts/set_static_ip.sh --ip 192.168.56.11 --prefix 24 --gateway 192.168.56.1 --dns 192.168.56.1,1.1.1.1,8.8.8.8
+sudo bash /opt/k8s-data-platform/scripts/set_hostname_hosts.sh --hostname k8s-worker-1 --entry "192.168.56.10 k8s-data-platform" --entry "192.168.56.11 k8s-worker-1" --entry "192.168.56.12 k8s-worker-2"
+hostname
+hostname -I
+ip route
+```
+
+```bash
+sudo bash /opt/k8s-data-platform/scripts/set_static_ip.sh --ip 192.168.56.12 --prefix 24 --gateway 192.168.56.1 --dns 192.168.56.1,1.1.1.1,8.8.8.8
+sudo bash /opt/k8s-data-platform/scripts/set_hostname_hosts.sh --hostname k8s-worker-2 --entry "192.168.56.10 k8s-data-platform" --entry "192.168.56.11 k8s-worker-1" --entry "192.168.56.12 k8s-worker-2"
 hostname
 hostname -I
 ip route
