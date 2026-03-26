@@ -414,13 +414,22 @@ ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubect
 log "3-node bootstrap completed."
 if is_true "${SETUP_INGRESS_STACK}"; then
   log "Access endpoints (Ingress URL):"
-  log "  Frontend : http://platform.local"
-  log "  Backend  : http://platform.local/docs"
+  if [[ "${ENVIRONMENT}" == "dev" ]]; then
+    log "  Frontend : http://dev.platform.local"
+    log "  Backend  : http://dev-api.platform.local/docs"
+  else
+    log "  Frontend : http://www.platform.local"
+    log "  Backend  : http://api.platform.local/docs"
+  fi
   log "  Jupyter  : http://jupyter.platform.local/lab"
   log "  GitLab   : http://gitlab.platform.local"
   log "  Airflow  : http://airflow.platform.local"
   log "  Nexus    : http://nexus.platform.local"
   log "Hosts file example:"
+  log "  ${INGRESS_LB_IP} dev.platform.local"
+  log "  ${INGRESS_LB_IP} dev-api.platform.local"
+  log "  ${INGRESS_LB_IP} www.platform.local"
+  log "  ${INGRESS_LB_IP} api.platform.local"
   log "  ${INGRESS_LB_IP} platform.local"
   log "  ${INGRESS_LB_IP} jupyter.platform.local"
   log "  ${INGRESS_LB_IP} gitlab.platform.local"

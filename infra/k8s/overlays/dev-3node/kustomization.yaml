@@ -18,5 +18,6 @@ patches:
   - path: platform-configmap-patch.yaml
   - path: platform-secrets-patch.yaml
   - path: backend-clusterrolebinding-patch.yaml
+  - path: mongodb-patch.yaml
   - path: node-placement-patch.yaml
   - path: gitlab-ingress-patch.yaml

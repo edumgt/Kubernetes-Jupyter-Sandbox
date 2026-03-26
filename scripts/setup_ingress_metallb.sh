@@ -266,6 +266,10 @@ if RESOLVED_LB_IP="$(wait_for_ingress_lb_ip)"; then
   cat <<EOF_HOSTS
 
 Add these entries to your hosts file:
+${RESOLVED_LB_IP} dev.platform.local
+${RESOLVED_LB_IP} dev-api.platform.local
+${RESOLVED_LB_IP} www.platform.local
+${RESOLVED_LB_IP} api.platform.local
 ${RESOLVED_LB_IP} platform.local
 ${RESOLVED_LB_IP} jupyter.platform.local
 ${RESOLVED_LB_IP} gitlab.platform.local

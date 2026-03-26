@@ -409,13 +409,20 @@ verify_http_endpoints() {
 
   log "Remote verify.sh is legacy (no --http-mode). Running NodePort checks + ingress curl fallback."
   ssh_run_sudo "${host}" "bash '${verify_script}' --env '${ENVIRONMENT}' --skip-http"
+  if [[ "${ENVIRONMENT}" == "dev" ]]; then
+    ssh_run_sudo "${host}" "set -euo pipefail; \
+      curl -fsS -H 'Host: dev.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null; \
+      curl -fsS -H 'Host: dev-api.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/docs' >/dev/null; \
+      curl -fsS -H 'Host: jupyter.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/lab' >/dev/null; \
+      curl -fsS -H 'Host: gitlab.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/users/sign_in' >/dev/null; \
+      curl -fsS -H 'Host: airflow.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null; \
+      curl -fsS -H 'Host: nexus.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null"
+    return 0
+  fi
+
   ssh_run_sudo "${host}" "set -euo pipefail; \
-    curl -fsS -H 'Host: platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null; \
-    curl -fsS -H 'Host: platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/docs' >/dev/null; \
-    curl -fsS -H 'Host: jupyter.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/lab' >/dev/null; \
-    curl -fsS -H 'Host: gitlab.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/users/sign_in' >/dev/null; \
-    curl -fsS -H 'Host: airflow.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null; \
-    curl -fsS -H 'Host: nexus.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null"
+    curl -fsS -H 'Host: www.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/' >/dev/null; \
+    curl -fsS -H 'Host: api.platform.local' 'http://${RESOLVED_INGRESS_LB_IP}/docs' >/dev/null"
 }
 
 check_harbor_endpoint() {
@@ -609,5 +616,5 @@ fi
 
 log "Post-reboot verification completed."
 if [[ -n "${RESOLVED_INGRESS_LB_IP}" ]]; then
-  log "hosts example: ${RESOLVED_INGRESS_LB_IP} platform.local jupyter.platform.local gitlab.platform.local airflow.platform.local nexus.platform.local"
+  log "hosts example: ${RESOLVED_INGRESS_LB_IP} dev.platform.local dev-api.platform.local www.platform.local api.platform.local jupyter.platform.local gitlab.platform.local airflow.platform.local nexus.platform.local"
 fi

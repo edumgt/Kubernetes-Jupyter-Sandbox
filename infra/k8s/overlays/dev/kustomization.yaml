@@ -16,3 +16,4 @@ patches:
   - path: platform-configmap-patch.yaml
   - path: platform-secrets-patch.yaml
   - path: backend-clusterrolebinding-patch.yaml
+  - path: mongodb-patch.yaml

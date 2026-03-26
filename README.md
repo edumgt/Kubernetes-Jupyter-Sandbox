@@ -966,6 +966,18 @@ frontend repo 를 `dev2` 가 push 하고, `dev1` clone 후 update 를 `git pull`
 
 ![gitlab frontend git flow](docs/screenshots/gitlab-frontend-git-flow.png)
 
+### GitLab/Nexus 점검 캡처 (Playwright, 2026-03-26)
+
+`test1@test.com` 계정의 공개 프로젝트(`apps-backend`, `apps-frontend`) 존재 확인:
+
+![gitlab test1 apps backend](docs/screenshots/gitlab-test1-apps-backend.png)
+
+![gitlab test1 apps frontend](docs/screenshots/gitlab-test1-apps-frontend.png)
+
+Nexus `pypi-hosted` 라이브러리 적재 확인(REST 조회 결과를 Playwright로 캡처):
+
+![nexus pypi libraries](docs/screenshots/nexus-pypi-libraries.png)
+
 재현 명령:
 
 ```bash

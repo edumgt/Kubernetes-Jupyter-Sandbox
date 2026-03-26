@@ -4,12 +4,12 @@ metadata:
   name: platform-config
 data:
   PLATFORM_ENV: prod
-  PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform
+  PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform_prod
   PLATFORM_REDIS_URL: redis://redis:6379/0
-  PLATFORM_BACKEND_URL: http://localhost:30081/docs
-  PLATFORM_FRONTEND_URL: http://localhost:30080
-  PLATFORM_CONTROL_PLANE_URL: http://localhost:30080/#control-plane
-  PLATFORM_ADMIN_URL: http://localhost:30080/#sandbox-admin
+  PLATFORM_BACKEND_URL: http://api.platform.local/docs
+  PLATFORM_FRONTEND_URL: http://www.platform.local
+  PLATFORM_CONTROL_PLANE_URL: http://www.platform.local/#control-plane
+  PLATFORM_ADMIN_URL: http://www.platform.local/#sandbox-admin
   PLATFORM_AIRFLOW_URL: http://localhost:30090
   PLATFORM_JUPYTER_URL: http://localhost:30088/lab
   PLATFORM_GITLAB_URL: http://localhost:30089

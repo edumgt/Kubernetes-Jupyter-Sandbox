@@ -6,6 +6,7 @@ namespace: data-platform-prod
 resources:
   - ../../base
   - namespace.yaml
+  - platform-ingress.yaml
 
 labels:
   - pairs:

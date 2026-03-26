@@ -10,6 +10,8 @@ PYTHON_SEED_FILE="${PYTHON_SEED_FILE:-${ROOT_DIR}/scripts/offline/python-dev-see
 NPM_SEED_FILE="${NPM_SEED_FILE:-${ROOT_DIR}/scripts/offline/npm-dev-seed.txt}"
 SKIP_PYTHON_SEED=0
 SKIP_NPM_SEED=0
+SKIP_JUPYTER_REQUIREMENTS=0
+SKIP_AIRFLOW_REQUIREMENTS=0
 DRY_RUN=0
 
 usage() {
@@ -27,6 +29,10 @@ Options:
                              Defaults to scripts/offline/npm-dev-seed.txt.
   --skip-python-seed         Skip extra Python dev seed warming.
   --skip-npm-seed            Skip extra npm dev seed warming.
+  --skip-jupyter-requirements
+                             Skip apps/jupyter/requirements.txt warming.
+  --skip-airflow-requirements
+                             Skip apps/airflow/requirements.txt warming.
   --dry-run                  Print commands without executing them.
   -h, --help                 Show this help.
 EOF
@@ -268,6 +274,14 @@ while [[ $# -gt 0 ]]; do
       SKIP_NPM_SEED=1
       shift
       ;;
+    --skip-jupyter-requirements)
+      SKIP_JUPYTER_REQUIREMENTS=1
+      shift
+      ;;
+    --skip-airflow-requirements)
+      SKIP_AIRFLOW_REQUIREMENTS=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -296,8 +310,12 @@ fi
 
 run_cmd mkdir -p "${OUT_DIR}"
 download_python_requirements backend "${ROOT_DIR}/apps/backend/requirements.txt"
-download_python_requirements jupyter "${ROOT_DIR}/apps/jupyter/requirements.txt"
-download_python_requirements airflow "${ROOT_DIR}/apps/airflow/requirements.txt"
+if [[ "${SKIP_JUPYTER_REQUIREMENTS}" != "1" ]]; then
+  download_python_requirements jupyter "${ROOT_DIR}/apps/jupyter/requirements.txt"
+fi
+if [[ "${SKIP_AIRFLOW_REQUIREMENTS}" != "1" ]]; then
+  download_python_requirements airflow "${ROOT_DIR}/apps/airflow/requirements.txt"
+fi
 if [[ "${SKIP_PYTHON_SEED}" != "1" ]]; then
   download_python_seed_packages "${PYTHON_SEED_FILE}"
 fi

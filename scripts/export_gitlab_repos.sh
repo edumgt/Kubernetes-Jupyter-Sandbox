@@ -84,50 +84,90 @@ write_backend_ci() {
 
   cat > "${repo_dir}/.gitlab-ci.yml" <<'EOF'
 stages:
-  - test
   - build
   - deploy
+  - verify
 
-python_sanity:
-  stage: test
-  image: harbor.local/data-platform/platform-python:3.12
-  script:
-    - python -m compileall app
+variables:
+  HARBOR_REGISTRY: "harbor.local"
+  HARBOR_PROJECT: "data-platform"
+  IMAGE_NAME: "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/k8s-data-platform-backend"
+  NEXUS_PYPI_INDEX_URL: "http://192.168.56.10:30091/repository/pypi-all/simple"
+  NEXUS_PYPI_TRUSTED_HOST: "192.168.56.10"
+  DEPLOY_NAMESPACE: "data-platform-dev"
+  TARGET_NODES: "192.168.56.10 192.168.56.11 192.168.56.12"
+  SSH_USER: "ubuntu"
+  SSH_PASSWORD: "ubuntu"
+  INGRESS_LB_IP: "192.168.56.240"
 
-kaniko_build:
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      variables:
+        DEPLOY_ENV: "dev"
+        APP_ENV: "dev"
+        BACKEND_HOST: "dev-api.platform.local"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      variables:
+        DEPLOY_ENV: "prod"
+        APP_ENV: "prod"
+        BACKEND_HOST: "api.platform.local"
+    - when: never
+
+build_backend_image:
   stage: build
-  image:
-    name: harbor.local/data-platform/platform-kaniko-executor:v1.23.2-debug
-    entrypoint: [""]
+  tags:
+    - control-plane-shell
   script:
-    - export IMAGE_NAME="harbor.local/${HARBOR_PROJECT:-data-platform}/k8s-data-platform-backend"
-    - mkdir -p /kaniko/.docker
-    - >
-      printf '{"auths":{"https://harbor.local":{"username":"%s","password":"%s"}}}'
-      "$HARBOR_USERNAME" "$HARBOR_PASSWORD" > /kaniko/.docker/config.json
+    - set -euo pipefail
+    - test -n "${NEXUS_PYPI_INDEX_URL:-}" || (echo "NEXUS_PYPI_INDEX_URL is required" && exit 1)
+    - echo "${NEXUS_PYPI_INDEX_URL}" | grep -Eq 'nexus\.platform\.local|127\.0\.0\.1:30091|192\.168\.56\.(10|240):30091' || (echo "NEXUS_PYPI_INDEX_URL must point to local Nexus" && exit 1)
+    - docker build --build-arg "APP_ENV=${APP_ENV}" --build-arg "PIP_INDEX_URL=${NEXUS_PYPI_INDEX_URL}" --build-arg "PIP_TRUSTED_HOST=${NEXUS_PYPI_TRUSTED_HOST}" -t "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -t "${IMAGE_NAME}:latest" .
+    - TAR_PATH="/tmp/backend-${CI_PIPELINE_ID}-${CI_JOB_ID}.tar"
+    - TAR_NAME="$(basename "${TAR_PATH}")"
+    - docker save "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -o "${TAR_PATH}"
     - |
-      EXTRA_KANIKO_ARGS=""
-      if [ -n "${NEXUS_PYPI_INDEX_URL:-}" ]; then
-        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg PIP_INDEX_URL=${NEXUS_PYPI_INDEX_URL}"
-      fi
-      if [ -n "${NEXUS_PYPI_TRUSTED_HOST:-}" ]; then
-        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg PIP_TRUSTED_HOST=${NEXUS_PYPI_TRUSTED_HOST}"
-      fi
-      /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/Dockerfile" --destination "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" --destination "${IMAGE_NAME}:latest" ${EXTRA_KANIKO_ARGS}
+      for node in ${TARGET_NODES}; do
+        if [ "${node}" = "192.168.56.10" ]; then
+          printf '%s\n' "${SSH_PASSWORD}" | sudo -S -p '' ctr -n k8s.io images import "${TAR_PATH}"
+          continue
+        fi
+        sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${node}" \
+          "printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' rm -f /tmp/${TAR_NAME}"
+        sshpass -p "${SSH_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TAR_PATH}" "${SSH_USER}@${node}:/tmp/${TAR_NAME}"
+        sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${node}" \
+          "printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' ctr -n k8s.io images import /tmp/${TAR_NAME} && rm -f /tmp/${TAR_NAME}"
+      done
+    - rm -f "${TAR_PATH}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"'
 
 deploy_backend:
   stage: deploy
-  image: harbor.local/data-platform/platform-kubectl:latest
+  tags:
+    - control-plane-shell
   needs:
-    - kaniko_build
+    - build_backend_image
   script:
-    - export IMAGE_NAME="harbor.local/${HARBOR_PROJECT:-data-platform}/k8s-data-platform-backend"
-    - export DEPLOY_ENV="${DEPLOY_ENV:-dev}"
-    - export DEPLOY_NAMESPACE="data-platform-${DEPLOY_ENV}"
-    - echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
-    - export KUBECONFIG="${CI_PROJECT_DIR}/kubeconfig"
-    - kubectl set image deployment/backend backend="${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -n "${DEPLOY_NAMESPACE}"
-    - kubectl rollout status deployment/backend -n "${DEPLOY_NAMESPACE}" --timeout=180s
+    - set -euo pipefail
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" set image deployment/backend backend="${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" rollout status deployment/backend --timeout=240s
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" get deploy backend -o wide
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" get pods -l app=backend -o wide
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"'
+
+verify_backend_route:
+  stage: verify
+  tags:
+    - control-plane-shell
+  needs:
+    - deploy_backend
+  script:
+    - set -euo pipefail
+    - 'curl -fsS -I -H "Host: ${BACKEND_HOST}" "http://${INGRESS_LB_IP}/docs" | head -n 1'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"'
 EOF
 }
 
@@ -138,42 +178,100 @@ write_frontend_ci() {
 stages:
   - build
   - deploy
+  - verify
 
-kaniko_build:
+variables:
+  HARBOR_REGISTRY: "harbor.local"
+  HARBOR_PROJECT: "data-platform"
+  IMAGE_NAME: "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/k8s-data-platform-frontend"
+  NEXUS_NPM_REGISTRY: "http://192.168.56.10:30091/repository/npm-all/"
+  DEPLOY_NAMESPACE: "data-platform-dev"
+  TARGET_NODES: "192.168.56.10 192.168.56.11 192.168.56.12"
+  SSH_USER: "ubuntu"
+  SSH_PASSWORD: "ubuntu"
+  INGRESS_LB_IP: "192.168.56.240"
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      variables:
+        DEPLOY_ENV: "dev"
+        APP_ENV: "dev"
+        VITE_API_BASE_URL: "http://dev-api.platform.local"
+        FRONTEND_HOST: "dev.platform.local"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      variables:
+        DEPLOY_ENV: "prod"
+        APP_ENV: "prod"
+        VITE_API_BASE_URL: "http://api.platform.local"
+        FRONTEND_HOST: "www.platform.local"
+    - when: never
+
+build_frontend_image:
   stage: build
-  image:
-    name: harbor.local/data-platform/platform-kaniko-executor:v1.23.2-debug
-    entrypoint: [""]
+  tags:
+    - control-plane-shell
   script:
-    - export IMAGE_NAME="harbor.local/${HARBOR_PROJECT:-data-platform}/k8s-data-platform-frontend"
-    - export VITE_API_BASE_URL="${VITE_API_BASE_URL:-http://platform.local}"
-    - mkdir -p /kaniko/.docker
-    - >
-      printf '{"auths":{"https://harbor.local":{"username":"%s","password":"%s"}}}'
-      "$HARBOR_USERNAME" "$HARBOR_PASSWORD" > /kaniko/.docker/config.json
+    - set -euo pipefail
+    - test -n "${NEXUS_NPM_REGISTRY:-}" || (echo "NEXUS_NPM_REGISTRY is required" && exit 1)
+    - echo "${NEXUS_NPM_REGISTRY}" | grep -Eq 'nexus\.platform\.local|127\.0\.0\.1:30091|192\.168\.56\.(10|240):30091' || (echo "NEXUS_NPM_REGISTRY must point to local Nexus" && exit 1)
     - |
-      EXTRA_KANIKO_ARGS=""
-      if [ -n "${NEXUS_NPM_REGISTRY:-}" ]; then
-        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg NPM_REGISTRY=${NEXUS_NPM_REGISTRY}"
-      fi
+      BUILD_ARGS=()
+      BUILD_ARGS+=(--build-arg "APP_ENV=${APP_ENV}")
+      BUILD_ARGS+=(--build-arg "NPM_REGISTRY=${NEXUS_NPM_REGISTRY}")
       if [ -n "${NEXUS_NPM_AUTH_B64:-}" ]; then
-        EXTRA_KANIKO_ARGS="${EXTRA_KANIKO_ARGS} --build-arg NPM_AUTH_B64=${NEXUS_NPM_AUTH_B64}"
+        BUILD_ARGS+=(--build-arg "NPM_AUTH_B64=${NEXUS_NPM_AUTH_B64}")
       fi
-      /kaniko/executor --context "${CI_PROJECT_DIR}" --dockerfile "${CI_PROJECT_DIR}/Dockerfile" --build-arg "VITE_API_BASE_URL=${VITE_API_BASE_URL}" --destination "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" --destination "${IMAGE_NAME}:latest" ${EXTRA_KANIKO_ARGS}
+      docker build "${BUILD_ARGS[@]}" \
+        --no-cache \
+        --build-arg "VITE_API_BASE_URL=${VITE_API_BASE_URL}" \
+        -t "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
+        -t "${IMAGE_NAME}:latest" .
+    - TAR_PATH="/tmp/frontend-${CI_PIPELINE_ID}-${CI_JOB_ID}.tar"
+    - TAR_NAME="$(basename "${TAR_PATH}")"
+    - docker save "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -o "${TAR_PATH}"
+    - |
+      for node in ${TARGET_NODES}; do
+        if [ "${node}" = "192.168.56.10" ]; then
+          printf '%s\n' "${SSH_PASSWORD}" | sudo -S -p '' ctr -n k8s.io images import "${TAR_PATH}"
+          continue
+        fi
+        sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${node}" \
+          "printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' rm -f /tmp/${TAR_NAME}"
+        sshpass -p "${SSH_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TAR_PATH}" "${SSH_USER}@${node}:/tmp/${TAR_NAME}"
+        sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${node}" \
+          "printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' ctr -n k8s.io images import /tmp/${TAR_NAME} && rm -f /tmp/${TAR_NAME}"
+      done
+    - rm -f "${TAR_PATH}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"'
 
 deploy_frontend:
   stage: deploy
-  image: harbor.local/data-platform/platform-kubectl:latest
+  tags:
+    - control-plane-shell
   needs:
-    - kaniko_build
+    - build_frontend_image
   script:
-    - export IMAGE_NAME="harbor.local/${HARBOR_PROJECT:-data-platform}/k8s-data-platform-frontend"
-    - export DEPLOY_ENV="${DEPLOY_ENV:-dev}"
-    - export DEPLOY_NAMESPACE="data-platform-${DEPLOY_ENV}"
-    - echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
-    - export KUBECONFIG="${CI_PROJECT_DIR}/kubeconfig"
-    - kubectl set image deployment/frontend frontend="${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -n "${DEPLOY_NAMESPACE}"
-    - kubectl rollout status deployment/frontend -n "${DEPLOY_NAMESPACE}" --timeout=180s
+    - set -euo pipefail
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" set image deployment/frontend frontend="${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" rollout status deployment/frontend --timeout=240s
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" get deploy frontend -o wide
+    - sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n "${DEPLOY_NAMESPACE}" get pods -l app=frontend -o wide
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"'
+
+verify_frontend_route:
+  stage: verify
+  tags:
+    - control-plane-shell
+  needs:
+    - deploy_frontend
+  script:
+    - set -euo pipefail
+    - 'curl -fsS -I -H "Host: ${FRONTEND_HOST}" "http://${INGRESS_LB_IP}/" | head -n 1'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"'
 EOF
 }
 
@@ -277,11 +375,14 @@ write_repo_readme() {
 
 ## 필요한 GitLab CI 변수
 
-- \`HARBOR_PROJECT\`
 - \`HARBOR_USERNAME\`
 - \`HARBOR_PASSWORD\`
-- \`KUBECONFIG_B64\`
-- \`DEPLOY_ENV\` (\`dev\` 또는 \`prod\`)
+- \`NEXUS_PYPI_INDEX_URL\` (backend)
+- \`NEXUS_PYPI_TRUSTED_HOST\` (backend)
+- \`NEXUS_NPM_REGISTRY\` (frontend)
+- \`NEXUS_NPM_AUTH_B64\` (frontend, optional)
+
+브랜치는 \`dev\` 또는 \`prod\`를 사용하면 환경별 namespace/dev-proxy URL이 자동으로 적용됩니다.
 
 ## 배포 대상
 

@@ -161,9 +161,15 @@ if [[ "${HTTP_MODE}" == "nodeport" ]]; then
   exit 0
 fi
 
-check_ingress "frontend" "platform.local" "/"
-check_ingress "backend" "platform.local" "/docs"
-check_ingress "jupyter" "jupyter.platform.local" "/lab"
-check_ingress "gitlab" "gitlab.platform.local" "/users/sign_in"
-check_ingress "airflow" "airflow.platform.local" "/"
-check_ingress "nexus" "nexus.platform.local" "/"
+if [[ "${ENVIRONMENT}" == "dev" ]]; then
+  check_ingress "frontend" "dev.platform.local" "/"
+  check_ingress "backend" "dev-api.platform.local" "/docs"
+  check_ingress "jupyter" "jupyter.platform.local" "/lab"
+  check_ingress "gitlab" "gitlab.platform.local" "/users/sign_in"
+  check_ingress "airflow" "airflow.platform.local" "/"
+  check_ingress "nexus" "nexus.platform.local" "/"
+  exit 0
+fi
+
+check_ingress "frontend" "www.platform.local" "/"
+check_ingress "backend" "api.platform.local" "/docs"

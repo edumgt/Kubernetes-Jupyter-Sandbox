@@ -1,7 +1,10 @@
+import os
 from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ENV_FILE = os.getenv("PLATFORM_ENV_FILE", ".env")
 
 
 class Settings(BaseSettings):
@@ -46,7 +49,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="PLATFORM_",
-        env_file=".env",
+        env_file=ENV_FILE,
         extra="ignore",
     )
 

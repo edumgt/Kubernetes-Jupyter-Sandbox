@@ -2,13 +2,16 @@ FROM harbor.local/data-platform/platform-node:22.22.0-bookworm-slim AS build
 
 WORKDIR /app
 
+ARG APP_ENV=dev
 ARG NPM_REGISTRY
 ARG NPM_AUTH_B64
 
 COPY package.json .
+COPY .env.dev .env.dev
+COPY .env.prod .env.prod
+RUN cp ".env.${APP_ENV}" .env
 RUN if [ -n "${NPM_REGISTRY:-}" ]; then \
       npm config set registry "${NPM_REGISTRY}"; \
-      npm config set always-auth true; \
       if [ -n "${NPM_AUTH_B64:-}" ]; then \
         registry_scope="$(printf '%s' "${NPM_REGISTRY}" | sed -e 's#^https\?://##' -e 's#/*$##')"; \
         npm config set "//${registry_scope}/:_auth" "${NPM_AUTH_B64}"; \

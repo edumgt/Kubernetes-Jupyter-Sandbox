@@ -4,7 +4,7 @@ metadata:
   name: platform-config
 data:
   PLATFORM_ENV: dev
-  PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform
+  PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform_dev
   PLATFORM_REDIS_URL: redis://redis:6379/0
   PLATFORM_BACKEND_URL: http://localhost:30081/docs
   PLATFORM_FRONTEND_URL: http://localhost:30080

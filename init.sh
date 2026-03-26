@@ -181,7 +181,7 @@ to_windows_path() {
 }
 
 build_domain_line() {
-  printf '%s %s\n' "${INGRESS_LB_IP}" "platform.local jupyter.platform.local gitlab.platform.local airflow.platform.local nexus.platform.local"
+  printf '%s %s\n' "${INGRESS_LB_IP}" "dev.platform.local dev-api.platform.local www.platform.local api.platform.local platform.local jupyter.platform.local gitlab.platform.local airflow.platform.local nexus.platform.local"
 }
 
 read_optional_packer_var() {
