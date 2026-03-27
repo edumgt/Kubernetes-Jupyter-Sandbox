@@ -23,6 +23,8 @@ const test1LabUrl = process.env.TEST1_LAB_URL ?? "";
 const browserExecutablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? "";
 const nexusUsername = process.env.NEXUS_USERNAME ?? "admin";
 const nexusPassword = process.env.NEXUS_PASSWORD ?? "nexus123!";
+const airflowUsername = process.env.AIRFLOW_USERNAME ?? "admin";
+const airflowPassword = process.env.AIRFLOW_PASSWORD ?? "admin12345!";
 const test1Username = process.env.TEST1_USERNAME ?? "test1@test.com";
 const test1Password = process.env.TEST1_PASSWORD ?? "123456";
 const adminUsername = process.env.ADMIN_USERNAME ?? process.env.CONTROL_PLANE_USERNAME ?? "admin@test.com";
@@ -143,8 +145,8 @@ async function captureAirflow(browser) {
   await waitForHttp(loginUrl, { timeoutMs: 240000 });
   const page = await createPage(browser, 1024);
   await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 240000 });
-  await page.getByLabel("Username").fill("admin");
-  await page.getByLabel("Password").fill("admin12345!");
+  await page.getByLabel("Username").fill(airflowUsername);
+  await page.getByLabel("Password").fill(airflowPassword);
   await page.getByRole("button", { name: /sign in/i }).click();
   await page.waitForLoadState("networkidle", { timeout: 240000 });
   await page.screenshot({ path: outputPath("airflow-home.png"), fullPage: true });
@@ -191,6 +193,73 @@ async function captureNexus(browser) {
   }
 
   await page.screenshot({ path: outputPath("nexus-home.png"), fullPage: true });
+  await page.close();
+}
+
+async function captureNexusBrowse(browser) {
+  await waitForHttp(nexusUrl, { timeoutMs: 600000 });
+  const page = await createPage(browser, 1200);
+  await page.goto(nexusUrl, { waitUntil: "domcontentloaded", timeout: 480000 });
+  await page.waitForLoadState("networkidle", { timeout: 480000 }).catch(() => {});
+
+  const usernameInput = page.locator('input[name="username"], input[type="text"]').first();
+  const passwordInput = page.locator('input[name="password"], input[type="password"]').first();
+  if (await usernameInput.isVisible().catch(() => false)) {
+    await usernameInput.fill(nexusUsername);
+  }
+  if (await passwordInput.isVisible().catch(() => false)) {
+    await passwordInput.fill(nexusPassword);
+    await page.keyboard.press("Enter");
+    await page.waitForLoadState("networkidle", { timeout: 480000 }).catch(() => {});
+  }
+
+  await page.goto(`${nexusUrl}/#browse/browse:npm-hosted`, {
+    waitUntil: "domcontentloaded",
+    timeout: 480000,
+  });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: outputPath("nexus-browse-npm-hosted.png"), fullPage: true });
+  await page.close();
+}
+
+async function captureNexusNpmLibraries(browser) {
+  const page = await createPage(browser, 1200);
+  const url = `${nexusUrl}/service/rest/v1/search?repository=npm-hosted`;
+  await waitForHttp(url, { timeoutMs: 600000 });
+  await page.goto(url, { waitUntil: "networkidle", timeout: 480000 });
+
+  await page.evaluate(() => {
+    const raw = document.body.innerText || "{}";
+    const data = JSON.parse(raw);
+    const rows = (data.items || []).slice(0, 30).map((item) => {
+      const npmName = item?.assets?.[0]?.npm?.name;
+      const normalized = npmName || `${item.group ? `@${item.group}/` : ""}${item.name || "-"}`;
+      const version = item.version || "-";
+      return `<tr><td>${normalized}</td><td>${version}</td></tr>`;
+    }).join("\n");
+
+    document.head.innerHTML = `
+      <style>
+        body { font-family: Arial, sans-serif; background: #f8fafc; margin: 24px; color: #0f172a; }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        p { margin: 0 0 16px; color: #475569; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; font-size: 14px; }
+        th { background: #e2e8f0; }
+      </style>
+    `;
+
+    document.body.innerHTML = `
+      <h1>Nexus npm-hosted Libraries</h1>
+      <p>source: /service/rest/v1/search?repository=npm-hosted</p>
+      <table>
+        <thead><tr><th>Package</th><th>Version</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  });
+
+  await page.screenshot({ path: outputPath("nexus-npm-libraries.png"), fullPage: false });
   await page.close();
 }
 
@@ -443,6 +512,8 @@ const captures = [
   ["jupyter", captureJupyter],
   ["gitlab", captureGitLab],
   ["nexus", captureNexus],
+  ["nexus-browse", captureNexusBrowse],
+  ["nexus-npm-libraries", captureNexusNpmLibraries],
   ["user-usage-history", captureUserUsageHistory],
   ["admin-ag-grid-users", captureAdminAgGridUsers],
   ["control-plane-login", captureControlPlaneLogin],
