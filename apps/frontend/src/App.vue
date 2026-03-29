@@ -2,14 +2,14 @@
   <q-layout view="lHh Lpr lFf">
     <q-page-container>
       <q-page class="page-shell">
-        <q-dialog v-model="loginModalOpen" :persistent="!isAuthenticated">
-          <q-card class="login-modal-card">
+        <section v-if="!isAuthenticated" class="login-screen">
+          <q-card flat class="surface-card login-page-card">
             <q-card-section>
               <div class="section-title">JWT Login</div>
-              <div class="card-title">먼저 로그인하세요</div>
+              <div class="card-title">플랫폼 로그인</div>
               <p class="muted">
-                로그인 후 role 기반으로 화면이 분기됩니다. user는 본인 Jupyter 사용 이력과 sandbox
-                작업 화면을, admin은 사용자 목록(AG Grid CE)과 모니터링 화면을 확인합니다.
+                사이트 첫 화면은 로그인 전용 화면입니다. 백엔드 JWT 로그인(`/api/auth/login`) 성공 후
+                사용자 role(user/admin)에 맞는 화면으로 이동합니다.
               </p>
               <div class="admin-login-grid">
                 <q-input
@@ -17,7 +17,7 @@
                   dense
                   outlined
                   color="dark"
-                  label="Email"
+                  label="Username (Email)"
                   class="admin-input"
                   @keyup.enter="loginApp"
                 />
@@ -36,12 +36,16 @@
                   unelevated
                   no-caps
                   icon="login"
-                  label="Login"
+                  label="JWT Login"
                   :loading="authLoading"
                   :disable="!loginForm.username || !loginForm.password"
                   @click="loginApp"
                 />
               </div>
+              <q-banner rounded class="banner-note login-token-note">
+                로그인 후 토큰은 로컬 세션에 저장되며 `Authorization: Bearer`와 `X-Auth-Token` 헤더로
+                API 인증에 사용됩니다.
+              </q-banner>
               <div class="demo-account-grid modal-account-grid">
                 <q-btn
                   v-for="account in demoAccounts"
@@ -55,138 +59,100 @@
               </div>
             </q-card-section>
           </q-card>
-        </q-dialog>
-
-        <section class="hero-panel">
-          <div class="eyebrow">K8s Data Platform OVA</div>
-          <h1>데모 사용자 로그인부터 Jupyter sandbox, 관리자 모니터링까지 한 화면에서</h1>
-          <p>
-            `test1@test.com`, `test2@test.com` 사용자는 로그인 후 본인 전용 Jupyter pod를 실행할 수
-            있고, `admin@test.com` 관리자는 사용자별 실행 여부, 사용시간, 사용회수와 cluster
-            inventory를 같은 웹앱에서 확인할 수 있습니다.
-          </p>
-          <div class="hero-actions">
-            <q-btn
-              color="dark"
-              unelevated
-              no-caps
-              icon="refresh"
-              label="Reload Dashboard"
-              @click="loadDashboard"
-            />
-            <q-btn
-              outline
-              color="dark"
-              no-caps
-              icon="play_circle"
-              label="Run ANSI SQL"
-              @click="runFirstQuery"
-            />
-          </div>
-          <div class="chip-grid">
-            <q-chip color="white" text-color="dark" square>
-              <strong>frontend</strong>&nbsp;v{{ frontendAppVersion }}
-            </q-chip>
-            <q-chip color="white" text-color="dark" square>
-              <strong>backend</strong>&nbsp;v{{ backendAppVersion }}
-            </q-chip>
-          </div>
         </section>
 
-        <section class="content-grid">
-          <q-card flat class="surface-card auth-card">
-            <q-card-section>
-              <div class="row items-center justify-between q-col-gutter-md">
-                <div>
-                  <div class="section-title">Sandbox Login</div>
-                  <div class="card-title">데모 사용자 / 관리자 인증</div>
+        <template v-else>
+          <section class="hero-panel">
+            <div class="eyebrow">K8s Data Platform OVA</div>
+            <h1>데모 사용자 로그인부터 Jupyter sandbox, 관리자 모니터링까지 한 화면에서</h1>
+            <p>
+              `test1@test.com`, `test2@test.com` 사용자는 로그인 후 본인 전용 Jupyter pod를 실행할 수
+              있고, `admin@test.com` 관리자는 사용자별 실행 여부, 사용시간, 사용회수와 cluster
+              inventory를 같은 웹앱에서 확인할 수 있습니다.
+            </p>
+            <div class="hero-actions">
+              <q-btn
+                color="dark"
+                unelevated
+                no-caps
+                icon="refresh"
+                label="Reload Dashboard"
+                @click="loadDashboard"
+              />
+              <q-btn
+                outline
+                color="dark"
+                no-caps
+                icon="play_circle"
+                label="Run ANSI SQL"
+                @click="runFirstQuery"
+              />
+            </div>
+            <div class="chip-grid">
+              <q-chip color="white" text-color="dark" square>
+                <strong>frontend</strong>&nbsp;v{{ frontendAppVersion }}
+              </q-chip>
+              <q-chip color="white" text-color="dark" square>
+                <strong>backend</strong>&nbsp;v{{ backendAppVersion }}
+              </q-chip>
+            </div>
+          </section>
+
+          <section class="content-grid">
+            <q-card flat class="surface-card auth-card">
+              <q-card-section>
+                <div class="row items-center justify-between q-col-gutter-md">
+                  <div>
+                    <div class="section-title">Sandbox Login</div>
+                    <div class="card-title">데모 사용자 / 관리자 인증</div>
+                  </div>
+                  <q-badge color="positive" rounded>
+                    {{ appSession.user.role }}
+                  </q-badge>
                 </div>
-                <q-badge :color="isAuthenticated ? 'positive' : 'grey-7'" rounded>
-                  {{ isAuthenticated ? appSession.user.role : "login required" }}
-                </q-badge>
-              </div>
 
-              <p class="muted">
-                사용자는 본인 계정으로만 Jupyter sandbox를 시작할 수 있고, 관리자는 별도 관리자
-                모드에서 사용자 sandbox 사용 현황과 control plane을 모니터링합니다.
-              </p>
+                <p class="muted">
+                  사용자는 본인 계정으로만 Jupyter sandbox를 시작할 수 있고, 관리자는 별도 관리자
+                  모드에서 사용자 sandbox 사용 현황과 control plane을 모니터링합니다.
+                </p>
 
-              <div v-if="!isAuthenticated" class="auth-session-bar">
-                <q-chip color="white" text-color="dark" square>
-                  <strong>Status</strong>&nbsp;login required
-                </q-chip>
-                <q-btn
-                  outline
-                  color="dark"
-                  no-caps
-                  icon="login"
-                  label="Open Login Modal"
-                  @click="openLoginModal"
-                />
-              </div>
-
-              <div v-else class="auth-session-bar">
-                <div class="chip-grid">
-                  <q-chip color="white" text-color="dark" square>
-                    <strong>User</strong>&nbsp;{{ appSession.user.display_name }}
-                  </q-chip>
-                  <q-chip color="white" text-color="dark" square>
-                    <strong>Email</strong>&nbsp;{{ appSession.user.username }}
-                  </q-chip>
-                  <q-chip color="white" text-color="dark" square>
-                    <strong>Role</strong>&nbsp;{{ appSession.user.role }}
-                  </q-chip>
-                </div>
-                <div class="hero-actions">
-                  <q-btn
-                    v-if="isAdmin"
-                    outline
-                    color="dark"
-                    no-caps
-                    icon="monitor"
-                    label="Refresh Admin Overview"
-                    :loading="adminLoading"
-                    @click="loadAdminOverview"
-                  />
-                  <q-btn
-                    flat
-                    color="negative"
-                    no-caps
-                    icon="logout"
-                    label="Logout"
-                    :loading="authLoading"
-                    @click="logoutApp"
-                  />
-                </div>
-              </div>
-
-              <div class="demo-account-grid">
-                <q-card
-                  v-for="account in demoAccounts"
-                  :key="account.username"
-                  flat
-                  class="demo-user-card"
-                >
-                  <q-card-section>
-                    <div class="card-label">{{ account.role }}</div>
-                    <div class="card-title demo-title">{{ account.display_name }}</div>
-                    <div class="card-endpoint">{{ account.username }}</div>
-                    <div class="card-detail">Password: 123456</div>
+                <div class="auth-session-bar">
+                  <div class="chip-grid">
+                    <q-chip color="white" text-color="dark" square>
+                      <strong>User</strong>&nbsp;{{ appSession.user.display_name }}
+                    </q-chip>
+                    <q-chip color="white" text-color="dark" square>
+                      <strong>Email</strong>&nbsp;{{ appSession.user.username }}
+                    </q-chip>
+                    <q-chip color="white" text-color="dark" square>
+                      <strong>Role</strong>&nbsp;{{ appSession.user.role }}
+                    </q-chip>
+                  </div>
+                  <div class="hero-actions">
                     <q-btn
+                      v-if="isAdmin"
                       outline
                       color="dark"
                       no-caps
-                      icon="login"
-                      class="demo-fill-button"
-                      label="Use This Account"
-                      @click="applyDemoAccount(account)"
+                      icon="monitor"
+                      label="Refresh Admin Overview"
+                      :loading="adminLoading"
+                      @click="loadAdminOverview"
                     />
-                  </q-card-section>
-                </q-card>
-              </div>
-            </q-card-section>
-          </q-card>
-        </section>
+                    <q-btn
+                      flat
+                      color="negative"
+                      no-caps
+                      icon="logout"
+                      label="Logout"
+                      :loading="authLoading"
+                      @click="logoutApp"
+                    />
+                  </div>
+                </div>
+              </q-card-section>
+            </q-card>
+          </section>
 
         <section v-if="isUser" class="content-grid">
           <q-card flat class="surface-card lab-card">
@@ -687,6 +653,7 @@
             </q-card-section>
           </q-card>
         </section>
+        </template>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -728,7 +695,6 @@ const loginForm = ref({
   username: savedAuthUser?.username || "test1@test.com",
   password: "123456",
 });
-const loginModalOpen = ref(!savedAuthToken);
 
 const appSession = ref(emptyAppSession(savedAuthToken, savedAuthUser));
 const labSession = ref(emptyLabSession());
@@ -1036,9 +1002,14 @@ function emptyControlPlaneState() {
 function authHeaders(extraHeaders = {}) {
   const headers = { ...extraHeaders };
   if (appSession.value.token) {
+    headers.Authorization = `Bearer ${appSession.value.token}`;
     headers["X-Auth-Token"] = appSession.value.token;
   }
   return headers;
+}
+
+function resolveAuthToken(payload) {
+  return payload?.access_token || payload?.token || "";
 }
 
 async function parseJson(response) {
@@ -1127,10 +1098,6 @@ function applyDemoAccount(account) {
     username: account.username,
     password: "123456",
   };
-}
-
-function openLoginModal() {
-  loginModalOpen.value = true;
 }
 
 function persistAppSession(token, user) {
@@ -1235,11 +1202,9 @@ async function restoreAuthSession() {
     const payload = await parseJson(response);
     appSession.value = emptyAppSession(appSession.value.token, payload.user);
     persistAppSession(appSession.value.token, payload.user);
-    loginModalOpen.value = false;
   } catch (error) {
     clearAppSessionStorage();
     appSession.value = emptyAppSession();
-    loginModalOpen.value = true;
     Notify.create({
       type: "warning",
       message: error.message,
@@ -1262,12 +1227,34 @@ async function loginApp() {
       body: JSON.stringify(loginForm.value),
     });
     const payload = await parseJson(response);
-    appSession.value = emptyAppSession(payload.token, payload.user);
-    persistAppSession(payload.token, payload.user);
-    loginModalOpen.value = false;
-    resetRoleScopedState();
+    const authToken = resolveAuthToken(payload);
+    if (!authToken) {
+      throw new Error("JWT login response is invalid.");
+    }
 
-    if (payload.user.role === "user") {
+    let authenticatedUser = payload.user || null;
+    if (!authenticatedUser) {
+      const meResponse = await fetch(`${apiBaseUrl}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "X-Auth-Token": authToken,
+        },
+      });
+      const mePayload = await parseJson(meResponse);
+      authenticatedUser = mePayload.user || null;
+    }
+
+    if (!authenticatedUser) {
+      throw new Error("User session was not returned by backend.");
+    }
+
+    appSession.value = emptyAppSession(authToken, authenticatedUser);
+    persistAppSession(authToken, authenticatedUser);
+    resetRoleScopedState();
+    await loadDashboard();
+    await runFirstQuery();
+
+    if (authenticatedUser.role === "user") {
       await refreshLabSession({ silent: true, skipSnapshotRefresh: true });
       await refreshSnapshotStatus({ silent: true });
       if (snapshotState.value.status === "building" || snapshotState.value.status === "pending") {
@@ -1279,7 +1266,7 @@ async function loginApp() {
         });
       }
       await loadUserUsage({ silent: true });
-    } else if (payload.user.role === "admin") {
+    } else if (authenticatedUser.role === "admin") {
       await loadAdminOverview({ silent: true });
       await loadControlPlaneDashboard({ silent: true });
       startAdminPolling();
@@ -1288,9 +1275,9 @@ async function loginApp() {
     Notify.create({
       type: "positive",
       message:
-        payload.user.role === "admin"
+        authenticatedUser.role === "admin"
           ? "Admin mode is ready."
-          : `Logged in as ${payload.user.display_name}.`,
+          : `Logged in as ${authenticatedUser.display_name}.`,
     });
   } catch (error) {
     Notify.create({
@@ -1316,7 +1303,6 @@ async function logoutApp() {
   } finally {
     clearAppSessionStorage();
     appSession.value = emptyAppSession();
-    loginModalOpen.value = true;
     resetRoleScopedState();
     authLoading.value = false;
     Notify.create({
@@ -1728,10 +1714,15 @@ function openLab() {
 
 onMounted(async () => {
   await loadDemoUsers();
+  await restoreAuthSession();
+
+  if (!isAuthenticated.value) {
+    loading.value = false;
+    return;
+  }
+
   await loadDashboard();
   await runFirstQuery();
-  await restoreAuthSession();
-  loginModalOpen.value = !isAuthenticated.value;
 
   if (isUser.value) {
     await refreshLabSession({ silent: true, skipSnapshotRefresh: true });

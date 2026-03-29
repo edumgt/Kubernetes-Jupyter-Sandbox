@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-import base64
 import json
-import hmac
-import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import time
 from typing import Any
 
+import jwt
+from jwt import InvalidTokenError
 from redis import Redis
 from redis.exceptions import RedisError
 
 from app.config import Settings
 from app.services.lab_identity import canonical_username
 
-AUTH_TOKEN_TTL_SECONDS = 60 * 60 * 12
 AUTH_TOKEN_PREFIX = "platform:auth:token:"
 USER_METRICS_PREFIX = "platform:auth:metrics:"
 
@@ -63,48 +61,17 @@ def _iso_now() -> str:
     return _utcnow().isoformat()
 
 
-def _b64url_encode(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def _b64url_decode(raw: str) -> bytes:
-    padding = "=" * ((4 - len(raw) % 4) % 4)
-    return base64.urlsafe_b64decode(f"{raw}{padding}")
-
-
-def _jwt_sign(message: str, secret: str) -> str:
-    digest = hmac.new(secret.encode(), message.encode(), hashlib.sha256).digest()
-    return _b64url_encode(digest)
-
-
-def _jwt_encode(payload: dict[str, Any], secret: str) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_segment = _b64url_encode(json.dumps(header, separators=(",", ":"), sort_keys=True).encode())
-    payload_segment = _b64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
-    message = f"{header_segment}.{payload_segment}"
-    signature = _jwt_sign(message, secret)
-    return f"{message}.{signature}"
-
-
-def _jwt_decode(token: str, secret: str) -> dict[str, Any] | None:
-    parts = token.split(".")
-    if len(parts) != 3:
-        return None
-
-    header_segment, payload_segment, signature_segment = parts
-    expected_signature = _jwt_sign(f"{header_segment}.{payload_segment}", secret)
-    if not hmac.compare_digest(expected_signature, signature_segment):
-        return None
-
+def _jwt_decode(token: str, settings: Settings) -> dict[str, Any] | None:
     try:
-        payload = json.loads(_b64url_decode(payload_segment).decode())
-    except (ValueError, json.JSONDecodeError):
+        payload = jwt.decode(
+            token,
+            settings.auth_jwt_secret,
+            algorithms=[settings.auth_jwt_algorithm],
+            issuer=settings.app_name,
+        )
+    except InvalidTokenError:
         return None
-
-    expires_at = int(payload.get("exp", 0) or 0)
-    if expires_at <= int(time.time()):
-        return None
-    return payload
+    return payload if isinstance(payload, dict) else None
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -211,9 +178,10 @@ def authenticate_demo_user(username: str, password: str) -> DemoUser:
 
 
 def store_auth_session(settings: Settings, user: DemoUser) -> dict[str, Any]:
+    ttl_seconds = max(60, settings.auth_jwt_ttl_seconds)
     issued_at = int(time.time())
-    expires_at = issued_at + AUTH_TOKEN_TTL_SECONDS
-    token = _jwt_encode(
+    expires_at = issued_at + ttl_seconds
+    token = jwt.encode(
         {
             "sub": user.username,
             "role": user.role,
@@ -223,6 +191,7 @@ def store_auth_session(settings: Settings, user: DemoUser) -> dict[str, Any]:
             "iss": settings.app_name,
         },
         settings.auth_jwt_secret,
+        algorithm=settings.auth_jwt_algorithm,
     )
     payload = {
         "token": token,
@@ -230,6 +199,8 @@ def store_auth_session(settings: Settings, user: DemoUser) -> dict[str, Any]:
         "role": user.role,
         "display_name": user.display_name,
         "created_at": datetime.fromtimestamp(issued_at, timezone.utc).isoformat(),
+        "expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),
+        "expires_in": ttl_seconds,
     }
 
     return payload
@@ -239,7 +210,7 @@ def get_auth_session(settings: Settings, token: str | None) -> dict[str, Any] | 
     if not token:
         return None
 
-    jwt_payload = _jwt_decode(token, settings.auth_jwt_secret)
+    jwt_payload = _jwt_decode(token, settings)
     if jwt_payload is not None:
         username = str(jwt_payload.get("sub", ""))
         user = DEMO_USERS_BY_NAME.get(username)
@@ -248,13 +219,17 @@ def get_auth_session(settings: Settings, token: str | None) -> dict[str, Any] | 
         role = str(jwt_payload.get("role") or user.role)
         display_name = str(jwt_payload.get("display_name") or user.display_name)
         issued_at = int(jwt_payload.get("iat", 0) or 0)
+        expires_at = int(jwt_payload.get("exp", 0) or 0)
         created_at = datetime.fromtimestamp(issued_at, timezone.utc).isoformat() if issued_at else _iso_now()
+        expires_at_iso = datetime.fromtimestamp(expires_at, timezone.utc).isoformat() if expires_at else None
         return {
             "token": token,
             "username": username,
             "role": role,
             "display_name": display_name,
             "created_at": created_at,
+            "expires_at": expires_at_iso,
+            "expires_in": max(0, expires_at - int(time.time())) if expires_at else None,
         }
 
     client = _redis_client(settings)
@@ -272,7 +247,7 @@ def delete_auth_session(settings: Settings, token: str | None) -> None:
         return
 
     # JWT is stateless. Keep legacy store cleanup for older session tokens.
-    if _jwt_decode(token, settings.auth_jwt_secret) is not None:
+    if _jwt_decode(token, settings) is not None:
         return
 
     client = _redis_client(settings)

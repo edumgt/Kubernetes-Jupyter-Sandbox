@@ -92,6 +92,9 @@ class DemoUserLoginRequest(BaseModel):
 
 
 class DemoUserLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
     token: str
     user: DemoUserInfo
 

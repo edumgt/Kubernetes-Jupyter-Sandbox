@@ -63,26 +63,57 @@ def list_notebooks(notebooks_path: str) -> list[str]:
     return sorted(item.name for item in path.iterdir() if item.suffix == ".ipynb")
 
 
+def resolve_auth_token(
+    authorization: str | None,
+    x_auth_token: str | None,
+) -> str | None:
+    if authorization:
+        parts = authorization.strip().split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+            return parts[1].strip()
+
+    if x_auth_token:
+        token = x_auth_token.strip()
+        if token:
+            return token
+
+    return None
+
+
 def require_control_plane_access(
+    authorization: str | None = Header(default=None),
     x_auth_token: str | None = Header(default=None),
     x_control_plane_token: str | None = Header(default=None),
 ):
     settings = get_settings()
-    auth_session = get_auth_session(settings, x_auth_token)
+    auth_token = resolve_auth_token(authorization, x_auth_token)
+    auth_session = get_auth_session(settings, auth_token)
     if auth_session and auth_session.get("role") == "admin":
         return settings
-    if not verify_control_plane_token(settings, x_control_plane_token):
-        raise HTTPException(status_code=401, detail="Control-plane login required.")
+
+    control_plane_token = x_control_plane_token.strip() if x_control_plane_token else auth_token
+    if not verify_control_plane_token(settings, control_plane_token):
+        raise HTTPException(
+            status_code=401,
+            detail="Control-plane login required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return settings
 
 
 def require_authenticated_user(
+    authorization: str | None = Header(default=None),
     x_auth_token: str | None = Header(default=None),
 ):
     settings = get_settings()
-    session = get_auth_session(settings, x_auth_token)
+    token = resolve_auth_token(authorization, x_auth_token)
+    session = get_auth_session(settings, token)
     if not session:
-        raise HTTPException(status_code=401, detail="Application login required.")
+        raise HTTPException(
+            status_code=401,
+            detail="Application login required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return session
 
 
@@ -147,6 +178,9 @@ def login_demo_user(request: DemoUserLoginRequest) -> DemoUserLoginResponse:
     session = store_auth_session(settings, user)
     record_demo_login(settings, user.username)
     return DemoUserLoginResponse(
+        access_token=session["token"],
+        token_type="bearer",
+        expires_in=int(session["expires_in"]),
         token=session["token"],
         user=DemoUserInfo(
             username=user.username,
@@ -169,11 +203,10 @@ def read_auth_session(current_user=Depends(require_authenticated_user)) -> DemoU
 
 @app.post("/api/auth/logout")
 def logout_demo_user(
-    x_auth_token: str | None = Header(default=None),
-    _current_user=Depends(require_authenticated_user),
+    current_user=Depends(require_authenticated_user),
 ) -> dict[str, str]:
     settings = get_settings()
-    delete_auth_session(settings, x_auth_token)
+    delete_auth_session(settings, str(current_user.get("token") or ""))
     return {"status": "ok"}
 
 

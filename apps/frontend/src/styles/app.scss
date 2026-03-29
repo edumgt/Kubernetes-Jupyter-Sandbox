@@ -24,6 +24,12 @@ body {
   padding: 32px 20px 72px;
 }
 
+.login-screen {
+  min-height: calc(100vh - 104px);
+  display: grid;
+  place-items: center;
+}
+
 .hero-panel {
   position: relative;
   overflow: hidden;
@@ -192,10 +198,15 @@ body {
   justify-content: space-between;
 }
 
+.login-page-card,
 .login-modal-card {
   width: min(760px, 95vw);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.96);
+}
+
+.login-token-note {
+  margin-top: 16px;
 }
 
 .modal-account-grid {
@@ -299,6 +310,10 @@ body {
 
   .hero-panel {
     padding: 22px;
+  }
+
+  .login-screen {
+    min-height: auto;
   }
 
   .lab-form {
