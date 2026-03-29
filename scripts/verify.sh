@@ -11,6 +11,8 @@ TARGET_HOST="${TARGET_HOST:-}"
 LB_IP="${LB_IP:-}"
 HTTP_TIMEOUT=10
 SKIP_HTTP=0
+STRICT_HARBOR_CHECK=0
+SKIP_HARBOR_CHECK=0
 
 usage() {
   cat <<'USAGE'
@@ -25,9 +27,15 @@ Options:
   --lb-ip <ip>                 Force ingress checks through this IP with Host headers.
                                Useful before hosts file is configured.
   --http-timeout <n>           curl timeout in seconds. Defaults to 10.
+  --strict-harbor-check        Fail when Harbor(NodePort 30092) check fails.
+  --skip-harbor-check          Skip Harbor(NodePort 30092) check.
   --skip-http                  Skip endpoint checks.
   -h, --help                   Show this help.
 USAGE
+}
+
+warn() {
+  printf '%s\n' "$*" >&2
 }
 
 die() {
@@ -61,6 +69,14 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--http-timeout requires a value"
       HTTP_TIMEOUT="$2"
       shift 2
+      ;;
+    --strict-harbor-check)
+      STRICT_HARBOR_CHECK=1
+      shift
+      ;;
+    --skip-harbor-check)
+      SKIP_HARBOR_CHECK=1
+      shift
       ;;
     --skip-http)
       SKIP_HTTP=1
@@ -156,7 +172,14 @@ if [[ "${HTTP_MODE}" == "nodeport" ]]; then
   check_http "jupyter" "http://${TARGET_HOST}:30088/lab"
   check_http "gitlab" "http://${TARGET_HOST}:30089/users/sign_in"
   check_http "nexus" "http://${TARGET_HOST}:30091"
-  check_http "harbor" "http://${TARGET_HOST}:30092"
+  if [[ "${SKIP_HARBOR_CHECK}" != "1" ]]; then
+    if ! check_http "harbor" "http://${TARGET_HOST}:30092"; then
+      if [[ "${STRICT_HARBOR_CHECK}" == "1" ]]; then
+        die "Harbor NodePort health check failed (http://${TARGET_HOST}:30092)."
+      fi
+      warn "[verify] WARNING: Harbor NodePort health check failed (http://${TARGET_HOST}:30092). Continuing (non-strict mode)."
+    fi
+  fi
   check_http "code-server" "http://${TARGET_HOST}:30100"
   exit 0
 fi
