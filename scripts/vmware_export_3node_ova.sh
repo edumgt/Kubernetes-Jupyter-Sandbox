@@ -10,6 +10,7 @@ PACKER_TEMPLATE="${PACKER_TEMPLATE:-${PACKER_DIR}/k8s-data-platform-vmware.pkr.h
 CONTROL_PLANE_NAME="${CONTROL_PLANE_NAME:-k8s-data-platform}"
 WORKER1_NAME="${WORKER1_NAME:-k8s-worker-1}"
 WORKER2_NAME="${WORKER2_NAME:-k8s-worker-2}"
+WORKER3_NAME="${WORKER3_NAME:-k8s-worker-3}"
 
 DIST_DIR=""
 VMRUN_WIN="${VMRUN_WIN:-}"
@@ -22,8 +23,8 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/vmware_export_3node_ova.sh [options]
 
-Exports 3 VMware VMs to OVA sequentially:
-  control-plane, worker-1, worker-2
+Exports 4 VMware VMs to OVA sequentially:
+  control-plane, worker-1, worker-2, worker-3
 
 Options:
   --vars-file PATH          Base vars file (default: packer/variables.vmware.auto.pkrvars.hcl)
@@ -32,6 +33,7 @@ Options:
   --control-plane-name NAME (default: k8s-data-platform)
   --worker1-name NAME       (default: k8s-worker-1)
   --worker2-name NAME       (default: k8s-worker-2)
+  --worker3-name NAME       (default: k8s-worker-3)
   --vmrun PATH              Optional vmrun.exe path
   --ovftool PATH            Optional ovftool.exe path
   --packer-exe PATH         Optional packer.exe path
@@ -174,6 +176,11 @@ while [[ $# -gt 0 ]]; do
       WORKER2_NAME="$2"
       shift 2
       ;;
+    --worker3-name)
+      [[ $# -ge 2 ]] || die "--worker3-name requires a value"
+      WORKER3_NAME="$2"
+      shift 2
+      ;;
     --vmrun)
       [[ $# -ge 2 ]] || die "--vmrun requires a value"
       VMRUN_WIN="$2"
@@ -261,5 +268,6 @@ export_one() {
 export_one "${CONTROL_PLANE_NAME}"
 export_one "${WORKER1_NAME}"
 export_one "${WORKER2_NAME}"
+export_one "${WORKER3_NAME}"
 
-log "All 3 OVA exports completed."
+log "All 4 OVA exports completed."
