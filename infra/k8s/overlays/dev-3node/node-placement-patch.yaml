@@ -1,17 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
-spec:
-  replicas: 2
-  template:
-    spec:
-      nodeSelector:
-        kubernetes.io/hostname: k8s-worker-3
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: jupyter
 spec:
   template:

@@ -121,10 +121,6 @@ spec:
                 name: platform-config
             - secretRef:
                 name: platform-secrets
-          volumeMounts:
-            - name: jupyter-workspace
-              mountPath: /workspace/notebooks
-              readOnly: true
           readinessProbe:
             httpGet:
               path: /docs
@@ -141,7 +137,3 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 6
-      volumes:
-        - name: jupyter-workspace
-          persistentVolumeClaim:
-            claimName: jupyter-workspace
