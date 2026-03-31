@@ -29,6 +29,16 @@ metadata:
 
 ---
 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: dashboard-admin
+  namespace: kubernetes-dashboard
+
+---
+
 kind: Service
 apiVersion: v1
 metadata:
@@ -167,6 +177,21 @@ subjects:
 
 ---
 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dashboard-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: dashboard-admin
+    namespace: kubernetes-dashboard
+
+---
+
 kind: Deployment
 apiVersion: apps/v1
 metadata:
@@ -177,6 +202,12 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 10
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       k8s-app: kubernetes-dashboard
@@ -198,6 +229,8 @@ spec:
           args:
             - --auto-generate-certificates
             - --namespace=kubernetes-dashboard
+            - --enable-insecure-login
+            - --enable-skip-login
             # Uncomment the following line to manually specify Kubernetes API server Host
             # If not specified, Dashboard will attempt to auto discover the API server and connect
             # to it. Uncomment only if the default does not work.
@@ -226,7 +259,7 @@ spec:
             secretName: kubernetes-dashboard-certs
         - name: tmp-volume
           emptyDir: {}
-      serviceAccountName: kubernetes-dashboard
+      serviceAccountName: dashboard-admin
       nodeSelector:
         "kubernetes.io/os": linux
       # Comment the following tolerations if Dashboard must not be deployed on master
@@ -262,6 +295,12 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 10
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       k8s-app: dashboard-metrics-scraper

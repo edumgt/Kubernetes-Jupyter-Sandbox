@@ -1,8 +1,8 @@
 <template>
   <q-layout view="lHh Lpr lFf">
     <q-page-container>
-      <q-page :class="['page-shell', { 'page-shell-with-offcanvas': isAuthenticated && leftDrawerOpen }]">
-        <aside v-if="isAuthenticated" class="offcanvas-panel" :class="{ 'is-open': leftDrawerOpen }">
+      <q-page :class="['page-shell', { 'page-shell-with-offcanvas': showDashboard && leftDrawerOpen }]">
+        <aside v-if="showDashboard" class="offcanvas-panel" :class="{ 'is-open': leftDrawerOpen }">
           <div class="offcanvas-head">
             <div class="section-title">Offcanvas Navigation</div>
             <div class="card-title">좌측 링크</div>
@@ -53,9 +53,9 @@
           </div>
         </aside>
 
-        <div v-if="isAuthenticated && leftDrawerOpen" class="offcanvas-backdrop" @click="leftDrawerOpen = false" />
+        <div v-if="showDashboard && leftDrawerOpen" class="offcanvas-backdrop" @click="leftDrawerOpen = false" />
 
-        <section v-if="!isAuthenticated" class="login-screen">
+        <section v-if="!showDashboard" class="login-screen">
           <q-card flat class="surface-card login-page-card">
             <q-card-section>
               <div class="section-title">JWT Login</div>
@@ -754,6 +754,7 @@ const snapshotLoading = ref(false);
 const adminLoading = ref(false);
 const usageLoading = ref(false);
 const leftDrawerOpen = ref(typeof window !== "undefined" ? window.innerWidth >= 1024 : true);
+const authResolved = ref(false);
 
 const demoAccounts = ref([
   { username: "test1@test.com", role: "user", display_name: "Test User 1" },
@@ -794,6 +795,7 @@ let labPollHandle = null;
 let adminPollHandle = null;
 
 const isAuthenticated = computed(() => appSession.value.authenticated);
+const showDashboard = computed(() => authResolved.value && isAuthenticated.value);
 const isAdmin = computed(() => appSession.value.user?.role === "admin");
 const isUser = computed(() => appSession.value.user?.role === "user");
 const managedUsername = computed(() => (isUser.value ? appSession.value.user.username : ""));
@@ -1900,6 +1902,7 @@ function openLab() {
 onMounted(async () => {
   await loadDemoUsers();
   await restoreAuthSession();
+  authResolved.value = true;
 
   if (!isAuthenticated.value) {
     loading.value = false;

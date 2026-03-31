@@ -26,16 +26,22 @@ workflow:
         DEPLOY_ENV: "dev"
         APP_ENV: "dev"
         BACKEND_HOST: "platform.local"
+        API_HOST: "dev-api.platform.local"
+        FRONTEND_ORIGIN: "http://platform.local"
     - if: '$CI_COMMIT_BRANCH == "main"'
       variables:
         DEPLOY_ENV: "dev"
         APP_ENV: "dev"
         BACKEND_HOST: "platform.local"
+        API_HOST: "dev-api.platform.local"
+        FRONTEND_ORIGIN: "http://platform.local"
     - if: '$CI_COMMIT_BRANCH == "prod"'
       variables:
         DEPLOY_ENV: "prod"
         APP_ENV: "prod"
         BACKEND_HOST: "api.platform.local"
+        API_HOST: "api.platform.local"
+        FRONTEND_ORIGIN: "http://www.platform.local"
     - when: never
 
 build_backend_image:
@@ -73,8 +79,12 @@ deploy_backend:
     - |
       sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${CONTROL_PLANE_IP}" "
         printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' set image deployment/backend backend='${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}'
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' patch deployment/backend --type='json' -p='[{\"op\":\"remove\",\"path\":\"/spec/template/spec/nodeSelector\"}]' || true
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' patch deployment/backend --type='json' -p='[{\"op\":\"remove\",\"path\":\"/spec/template/spec/volumes/0\"}]' || true
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' patch deployment/backend --type='json' -p='[{\"op\":\"remove\",\"path\":\"/spec/template/spec/containers/0/volumeMounts/0\"}]' || true
         printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' rollout status deployment/backend --timeout=240s
         printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' get deploy backend -o wide
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' get endpoints backend -o wide
         printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' get pods -l app=backend -o wide
       "
   rules:
@@ -89,5 +99,14 @@ verify_backend_route:
   script:
     - set -euo pipefail
     - 'curl -fsS -I -H "Host: ${BACKEND_HOST}" "http://${INGRESS_LB_IP}/docs"'
+    - |
+      PRE_FLIGHT_RESPONSE="$(curl -fsS -i -X OPTIONS \
+        -H "Host: ${API_HOST}" \
+        -H "Origin: ${FRONTEND_ORIGIN}" \
+        -H "Access-Control-Request-Method: POST" \
+        -H "Access-Control-Request-Headers: content-type" \
+        "http://${INGRESS_LB_IP}/api/auth/login")"
+      printf "%s\n" "${PRE_FLIGHT_RESPONSE}" | grep -Eiq '^access-control-allow-origin:'
+      printf "%s\n" "${PRE_FLIGHT_RESPONSE}" | grep -Eiq '^access-control-allow-methods:'
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod" || $CI_COMMIT_BRANCH == "main"'
