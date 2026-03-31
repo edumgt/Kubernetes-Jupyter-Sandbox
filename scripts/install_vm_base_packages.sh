@@ -7,6 +7,7 @@ PACKER_VARS="${PACKER_VARS:-${ROOT_DIR}/packer/variables.vmware.auto.pkrvars.hcl
 CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-192.168.56.10}"
 WORKER1_IP="${WORKER1_IP:-192.168.56.11}"
 WORKER2_IP="${WORKER2_IP:-192.168.56.12}"
+WORKER3_IP="${WORKER3_IP:-}"
 SSH_USER="${SSH_USER:-}"
 SSH_PASSWORD="${SSH_PASSWORD:-}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
@@ -18,7 +19,7 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/install_vm_base_packages.sh [options]
 
-Installs common Linux utility packages on the three VMware nodes and optionally
+Installs common Linux utility packages on VMware nodes and optionally
 pulls the Playwright Docker image onto each VM.
 
 Options:
@@ -26,6 +27,7 @@ Options:
   --control-plane-ip IP       Control-plane VM IP.
   --worker1-ip IP             Worker 1 VM IP.
   --worker2-ip IP             Worker 2 VM IP.
+  --worker3-ip IP             Optional Worker 3 VM IP.
   --ssh-user USER             SSH username override.
   --ssh-password PASS         SSH password override.
   --ssh-key-path PATH         SSH private key override.
@@ -134,6 +136,10 @@ while [[ $# -gt 0 ]]; do
       WORKER2_IP="$2"
       shift 2
       ;;
+    --worker3-ip)
+      WORKER3_IP="$2"
+      shift 2
+      ;;
     --ssh-user)
       SSH_USER="$2"
       shift 2
@@ -175,6 +181,9 @@ fi
 if [[ -z "${SSH_PASSWORD}" && -z "${SSH_KEY_PATH}" ]]; then
   SSH_PASSWORD="$(read_optional_packer_var ssh_password)"
 fi
+if [[ -z "${WORKER3_IP}" ]]; then
+  WORKER3_IP="$(read_optional_packer_var worker3_ip)"
+fi
 
 [[ -n "${SSH_USER}" ]] || die "Unable to determine SSH user."
 [[ -n "${SSH_PASSWORD}" || -n "${SSH_KEY_PATH}" ]] || die "Provide --ssh-password or --ssh-key-path."
@@ -194,6 +203,9 @@ hosts=(
   "${WORKER1_IP}:worker-1"
   "${WORKER2_IP}:worker-2"
 )
+if [[ -n "${WORKER3_IP}" ]]; then
+  hosts+=("${WORKER3_IP}:worker-3")
+fi
 
 for item in "${hosts[@]}"; do
   IFS=':' read -r host label <<<"${item}"

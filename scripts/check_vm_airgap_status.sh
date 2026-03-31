@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-/etc/kubernetes/admin.conf}"
-EXPECTED_NODES="${EXPECTED_NODES:-k8s-data-platform,k8s-worker-1,k8s-worker-2}"
+EXPECTED_NODES="${EXPECTED_NODES:-k8s-data-platform,k8s-worker-1,k8s-worker-2,k8s-worker-3}"
 WAIT_TIMEOUT_SEC="${WAIT_TIMEOUT_SEC:-1200}"
 POLL_INTERVAL_SEC="${POLL_INTERVAL_SEC:-10}"
 LOG_DIR="${LOG_DIR:-/var/log/k8s-data-platform}"

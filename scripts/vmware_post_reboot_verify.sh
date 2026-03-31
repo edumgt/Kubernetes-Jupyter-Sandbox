@@ -8,6 +8,7 @@ PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.vmware.auto.pkrvars.hcl}"
 CONTROL_PLANE_NAME="${CONTROL_PLANE_NAME:-k8s-data-platform}"
 WORKER1_NAME="${WORKER1_NAME:-k8s-worker-1}"
 WORKER2_NAME="${WORKER2_NAME:-k8s-worker-2}"
+WORKER3_NAME="${WORKER3_NAME:-k8s-worker-3}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 REMOTE_REPO_ROOT="${REMOTE_REPO_ROOT:-/opt/k8s-data-platform}"
 
@@ -47,7 +48,7 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/vmware_post_reboot_verify.sh [options]
 
-Post-reboot verification for existing VMware 3-node cluster:
+Post-reboot verification for existing VMware cluster:
   - Resolve control-plane SSH endpoint
   - Wait nodes/pods/PVC readiness
   - Re-run ingress URL checks (verify.sh)
@@ -58,6 +59,7 @@ Options:
   --control-plane-name NAME    Default: k8s-data-platform
   --worker1-name NAME          Default: k8s-worker-1
   --worker2-name NAME          Default: k8s-worker-2
+  --worker3-name NAME          Default: k8s-worker-3
 
   --control-plane-ip IP        Use static SSH host directly (skip vmrun IP detect)
   --ingress-lb-ip IP           Fixed ingress LB IP for verify.sh (optional)
@@ -364,6 +366,11 @@ validate_cluster_state() {
   remote_kubectl "${host}" "wait --for=condition=Ready node/${CONTROL_PLANE_NAME} --timeout=420s"
   remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER1_NAME} --timeout=420s"
   remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER2_NAME} --timeout=420s"
+  if ssh_run_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl get node '${WORKER3_NAME}' >/dev/null 2>&1"; then
+    remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER3_NAME} --timeout=420s"
+  else
+    log "Worker-3 node '${WORKER3_NAME}' not found; skipping worker-3 readiness wait."
+  fi
 
   not_ready_pods="$(
     ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods --no-headers | awk '\$3 != \"Running\" && \$3 != \"Completed\" { print \$1 \" \" \$3 }'" || true
@@ -472,6 +479,11 @@ while [[ $# -gt 0 ]]; do
     --worker2-name)
       [[ $# -ge 2 ]] || die "--worker2-name requires a value"
       WORKER2_NAME="$2"
+      shift 2
+      ;;
+    --worker3-name)
+      [[ $# -ge 2 ]] || die "--worker3-name requires a value"
+      WORKER3_NAME="$2"
       shift 2
       ;;
     --control-plane-ip)
@@ -602,7 +614,7 @@ fi
 log "Control-plane SSH endpoint: ${CONTROL_PLANE_SSH_HOST}"
 wait_for_ssh "${CONTROL_PLANE_SSH_HOST}" "control-plane"
 
-log "Checking 3-node cluster readiness"
+log "Checking cluster readiness (control-plane + worker1/worker2 + optional worker3)"
 validate_cluster_state "${CONTROL_PLANE_SSH_HOST}"
 
 log "Checking ingress URL endpoints"

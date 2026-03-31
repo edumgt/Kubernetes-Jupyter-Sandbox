@@ -7,16 +7,17 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/bootstrap_3node_k8s_ova.sh --config <env-file>
 
-This script configures a 3-node Kubernetes layout automatically:
+This script configures a Kubernetes layout automatically:
   control-plane (k8s-data-platform)
   worker-1 (k8s-worker-1)
   worker-2 (k8s-worker-2)
+  worker-3 (k8s-worker-3, optional)
 
 Features:
-  1) Static IP/netplan setup for all 3 nodes
+  1) Static IP/netplan setup for all nodes
   2) Hostname + /etc/hosts alignment
   3) kubeadm join for worker nodes
-  4) Optional overlay apply for GitLab + Nexus placement (dev-3node)
+  4) Optional overlay apply for GitLab + Nexus placement
   5) Optional NGINX Ingress + MetalLB setup for URL-based access
 
 Required:
@@ -90,6 +91,10 @@ WORKER2_SSH_HOST="${WORKER2_SSH_HOST:-}"
 WORKER2_HOSTNAME="${WORKER2_HOSTNAME:-k8s-worker-2}"
 WORKER2_IP="${WORKER2_IP:-}"
 
+WORKER3_SSH_HOST="${WORKER3_SSH_HOST:-}"
+WORKER3_HOSTNAME="${WORKER3_HOSTNAME:-k8s-worker-3}"
+WORKER3_IP="${WORKER3_IP:-}"
+
 NETWORK_CIDR_PREFIX="${NETWORK_CIDR_PREFIX:-24}"
 GATEWAY="${GATEWAY:-}"
 DNS_SERVERS="${DNS_SERVERS:-}"
@@ -114,6 +119,13 @@ INGRESS_MANIFEST="${INGRESS_MANIFEST:-}"
 [[ -n "${WORKER1_IP}" ]] || die "WORKER1_IP is required."
 [[ -n "${WORKER2_SSH_HOST}" ]] || die "WORKER2_SSH_HOST is required."
 [[ -n "${WORKER2_IP}" ]] || die "WORKER2_IP is required."
+
+ENABLE_WORKER3=0
+if [[ -n "${WORKER3_SSH_HOST}" || -n "${WORKER3_IP}" ]]; then
+  [[ -n "${WORKER3_SSH_HOST}" ]] || die "WORKER3_SSH_HOST is required when WORKER3_IP is set."
+  [[ -n "${WORKER3_IP}" ]] || die "WORKER3_IP is required when WORKER3_SSH_HOST is set."
+  ENABLE_WORKER3=1
+fi
 
 if ! is_true "${SKIP_NETWORK}"; then
   [[ -n "${GATEWAY}" ]] || die "GATEWAY is required unless SKIP_NETWORK=1."
@@ -226,12 +238,10 @@ default_ingress_values() {
   fi
 }
 
-HOSTS_BLOCK="$(cat <<EOF
-${CONTROL_PLANE_IP} ${CONTROL_PLANE_HOSTNAME}
-${WORKER1_IP} ${WORKER1_HOSTNAME}
-${WORKER2_IP} ${WORKER2_HOSTNAME}
-EOF
-)"
+HOSTS_BLOCK="${CONTROL_PLANE_IP} ${CONTROL_PLANE_HOSTNAME}"$'\n'"${WORKER1_IP} ${WORKER1_HOSTNAME}"$'\n'"${WORKER2_IP} ${WORKER2_HOSTNAME}"
+if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
+  HOSTS_BLOCK="${HOSTS_BLOCK}"$'\n'"${WORKER3_IP} ${WORKER3_HOSTNAME}"
+fi
 HOSTS_B64="$(printf '%s\n' "${HOSTS_BLOCK}" | base64 -w 0)"
 
 configure_node_network() {
@@ -365,11 +375,17 @@ log "Checking SSH connectivity"
 wait_for_ssh "${CONTROL_PLANE_SSH_HOST}" "control-plane bootstrap"
 wait_for_ssh "${WORKER1_SSH_HOST}" "worker1 bootstrap"
 wait_for_ssh "${WORKER2_SSH_HOST}" "worker2 bootstrap"
+if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
+  wait_for_ssh "${WORKER3_SSH_HOST}" "worker3 bootstrap"
+fi
 
 if ! is_true "${SKIP_NETWORK}"; then
   configure_node_network "${CONTROL_PLANE_SSH_HOST}" "${CONTROL_PLANE_IP}" "${CONTROL_PLANE_HOSTNAME}"
   configure_node_network "${WORKER1_SSH_HOST}" "${WORKER1_IP}" "${WORKER1_HOSTNAME}"
   configure_node_network "${WORKER2_SSH_HOST}" "${WORKER2_IP}" "${WORKER2_HOSTNAME}"
+  if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
+    configure_node_network "${WORKER3_SSH_HOST}" "${WORKER3_IP}" "${WORKER3_HOSTNAME}"
+  fi
 fi
 
 if ! is_true "${SKIP_JOIN}"; then
@@ -380,15 +396,25 @@ if ! is_true "${SKIP_JOIN}"; then
 
   ensure_worker_joined "${WORKER1_IP}" "${WORKER1_HOSTNAME}" "${JOIN_COMMAND_B64}"
   ensure_worker_joined "${WORKER2_IP}" "${WORKER2_HOSTNAME}" "${JOIN_COMMAND_B64}"
+  if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
+    ensure_worker_joined "${WORKER3_IP}" "${WORKER3_HOSTNAME}" "${JOIN_COMMAND_B64}"
+  fi
 
   log "Waiting for worker nodes to become Ready"
   ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER1_HOSTNAME} --timeout=420s"
   ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER2_HOSTNAME} --timeout=420s"
+  if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
+    ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER3_HOSTNAME} --timeout=420s"
+  fi
 fi
 
 if is_true "${APPLY_OVERLAY}"; then
-  log "Applying 3-node overlay (${OVERLAY})"
-  ssh_run_sudo "${CONTROL_PLANE_IP}" "if [[ -f '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' ]]; then bash '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' --env '${ENVIRONMENT}' --overlay '${OVERLAY}' --workers '${WORKER1_HOSTNAME},${WORKER2_HOSTNAME}'; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' >&2; exit 1; fi"
+  OVERLAY_WORKERS="${WORKER1_HOSTNAME},${WORKER2_HOSTNAME}"
+  if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
+    OVERLAY_WORKERS="${OVERLAY_WORKERS},${WORKER3_HOSTNAME}"
+  fi
+  log "Applying overlay (${OVERLAY}) with workers=${OVERLAY_WORKERS}"
+  ssh_run_sudo "${CONTROL_PLANE_IP}" "if [[ -f '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' ]]; then bash '${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' --env '${ENVIRONMENT}' --overlay '${OVERLAY}' --workers '${OVERLAY_WORKERS}'; else echo 'Missing remote script: ${REMOTE_REPO_ROOT}/scripts/configure_multinode_cluster.sh' >&2; exit 1; fi"
 fi
 
 if is_true "${SETUP_INGRESS_STACK}"; then
@@ -411,7 +437,7 @@ fi
 log "Final node status"
 ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide"
 
-log "3-node bootstrap completed."
+log "Bootstrap completed."
 if is_true "${SETUP_INGRESS_STACK}"; then
   log "Access endpoints (Ingress URL):"
   if [[ "${ENVIRONMENT}" == "dev" ]]; then

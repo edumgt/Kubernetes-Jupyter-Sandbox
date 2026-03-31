@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK_SCRIPT_PATH="${CHECK_SCRIPT_PATH:-${SCRIPT_DIR}/check_vm_airgap_status.sh}"
-EXPECTED_NODES="${EXPECTED_NODES:-k8s-data-platform,k8s-worker-1,k8s-worker-2}"
+EXPECTED_NODES="${EXPECTED_NODES:-k8s-data-platform,k8s-worker-1,k8s-worker-2,k8s-worker-3}"
 WAIT_TIMEOUT_SEC="${WAIT_TIMEOUT_SEC:-1200}"
 POLL_INTERVAL_SEC="${POLL_INTERVAL_SEC:-10}"
 LOG_DIR="${LOG_DIR:-/var/log/k8s-data-platform}"
@@ -25,7 +25,7 @@ Options:
   --script-path PATH        Checker script path.
                             Default: scripts/check_vm_airgap_status.sh
   --expected-nodes CSV      Expected node names.
-                            Default: k8s-data-platform,k8s-worker-1,k8s-worker-2
+                            Default: k8s-data-platform,k8s-worker-1,k8s-worker-2,k8s-worker-3
   --wait-timeout-sec N      Max wait for cluster/node readiness (default: 1200)
   --poll-interval-sec N     Poll interval while waiting (default: 10)
   --log-dir PATH            Log directory passed to checker (default: /var/log/k8s-data-platform)

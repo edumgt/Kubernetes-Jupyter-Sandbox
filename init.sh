@@ -12,10 +12,12 @@ VMWARE_OUTPUT_DIR_WIN="${VMWARE_OUTPUT_DIR_WIN:-}"
 CONTROL_PLANE_HOSTNAME="${CONTROL_PLANE_HOSTNAME:-k8s-data-platform}"
 WORKER1_HOSTNAME="${WORKER1_HOSTNAME:-k8s-worker-1}"
 WORKER2_HOSTNAME="${WORKER2_HOSTNAME:-k8s-worker-2}"
+WORKER3_HOSTNAME="${WORKER3_HOSTNAME:-k8s-worker-3}"
 
 CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-192.168.56.10}"
 WORKER1_IP="${WORKER1_IP:-192.168.56.11}"
 WORKER2_IP="${WORKER2_IP:-192.168.56.12}"
+WORKER3_IP="${WORKER3_IP:-192.168.56.13}"
 GATEWAY="${GATEWAY:-192.168.56.1}"
 DNS_SERVERS="${DNS_SERVERS:-192.168.56.1,1.1.1.1,8.8.8.8}"
 NETWORK_CIDR_PREFIX="${NETWORK_CIDR_PREFIX:-24}"
@@ -54,7 +56,7 @@ usage() {
 Usage: bash init.sh [options] [-- <extra start.sh args>]
 
 init.sh helps with the post-import VMware OVA workflow:
-  1) Import 3 OVA files into VMware Workstation output paths
+  1) Import 4 OVA files into VMware Workstation output paths
   2) Print the exact per-VM commands for static IP + hostname setup
   3) Add a WSL route for 192.168.56.0/24 via the Windows/WSL gateway
   4) Preload an offline bundle into the control-plane VM
@@ -72,9 +74,10 @@ Important:
       k8s-data-platform.ova
       k8s-worker-1.ova
       k8s-worker-2.ova
-  - If the 3 imported VMs currently share the same IP, you must first log into
+      k8s-worker-3.ova
+  - If the imported VMs currently share the same IP, you must first log into
     each VM console separately in VMware and run the printed commands.
-  - init.sh cannot safely change 3 different VMs remotely while they all answer
+  - init.sh cannot safely change multiple VMs remotely while they all answer
     on the same address.
   - The WSL route step assumes Windows/VMware networking is already configured
     so the Windows host can reach 192.168.56.0/24.
@@ -83,6 +86,7 @@ Options:
   --control-plane-ip IP       Default: 192.168.56.10
   --worker1-ip IP             Default: 192.168.56.11
   --worker2-ip IP             Default: 192.168.56.12
+  --worker3-ip IP             Default: 192.168.56.13
   --gateway IP                Default: 192.168.56.1
   --dns-servers CSV           Default: 192.168.56.1,1.1.1.1,8.8.8.8
   --network-cidr-prefix N     Default: 24
@@ -111,7 +115,7 @@ Options:
   --preload-with-runner       Apply runner overlay too with preload
 
 Stages:
-  --import-ova                Import k8s-data-platform / worker1 / worker2 OVA files
+  --import-ova                Import k8s-data-platform / worker1 / worker2 / worker3 OVA files
   --vm-commands               Print per-VM commands only
   --apply-wsl-route           Add/replace WSL route for 192.168.56.0/24
   --preload-offline-bundle    Build/reuse and copy the offline bundle to the control-plane VM
@@ -229,8 +233,8 @@ resolve_import_settings() {
 
 run_import_ova() {
   local ova_dir_unix output_dir_unix
-  local cp_ova_unix w1_ova_unix w2_ova_unix
-  local cp_vmx_win cp_vmx_unix w1_vmx_win w1_vmx_unix w2_vmx_win w2_vmx_unix
+  local cp_ova_unix w1_ova_unix w2_ova_unix w3_ova_unix
+  local cp_vmx_win cp_vmx_unix w1_vmx_win w1_vmx_unix w2_vmx_win w2_vmx_unix w3_vmx_win w3_vmx_unix
 
   resolve_import_settings
 
@@ -240,10 +244,12 @@ run_import_ova() {
   cp_ova_unix="${ova_dir_unix}/${CONTROL_PLANE_HOSTNAME}.ova"
   w1_ova_unix="${ova_dir_unix}/${WORKER1_HOSTNAME}.ova"
   w2_ova_unix="${ova_dir_unix}/${WORKER2_HOSTNAME}.ova"
+  w3_ova_unix="${ova_dir_unix}/${WORKER3_HOSTNAME}.ova"
 
   [[ -f "${cp_ova_unix}" ]] || die "Missing control-plane OVA: ${cp_ova_unix}"
   [[ -f "${w1_ova_unix}" ]] || die "Missing worker1 OVA: ${w1_ova_unix}"
   [[ -f "${w2_ova_unix}" ]] || die "Missing worker2 OVA: ${w2_ova_unix}"
+  [[ -f "${w3_ova_unix}" ]] || die "Missing worker3 OVA: ${w3_ova_unix}"
 
   cp_vmx_win="${VMWARE_OUTPUT_DIR_WIN%/}/${CONTROL_PLANE_HOSTNAME}.vmx"
   cp_vmx_unix="${output_dir_unix}/${CONTROL_PLANE_HOSTNAME}.vmx"
@@ -251,9 +257,11 @@ run_import_ova() {
   w1_vmx_unix="${output_dir_unix}/${WORKER1_HOSTNAME}/${WORKER1_HOSTNAME}.vmx"
   w2_vmx_win="${VMWARE_OUTPUT_DIR_WIN%/}/${WORKER2_HOSTNAME}/${WORKER2_HOSTNAME}.vmx"
   w2_vmx_unix="${output_dir_unix}/${WORKER2_HOSTNAME}/${WORKER2_HOSTNAME}.vmx"
+  w3_vmx_win="${VMWARE_OUTPUT_DIR_WIN%/}/${WORKER3_HOSTNAME}/${WORKER3_HOSTNAME}.vmx"
+  w3_vmx_unix="${output_dir_unix}/${WORKER3_HOSTNAME}/${WORKER3_HOSTNAME}.vmx"
 
   if [[ "${FORCE_IMPORT_OVA}" -ne 1 ]]; then
-    if [[ -f "${cp_vmx_unix}" && -f "${w1_vmx_unix}" && -f "${w2_vmx_unix}" ]]; then
+    if [[ -f "${cp_vmx_unix}" && -f "${w1_vmx_unix}" && -f "${w2_vmx_unix}" && -f "${w3_vmx_unix}" ]]; then
       log "Existing imported VMX set detected. Skipping OVA import."
       return 0
     fi
@@ -264,6 +272,7 @@ run_import_ova() {
     log "  ${cp_ova_unix} -> ${cp_vmx_win}"
     log "  ${w1_ova_unix} -> ${w1_vmx_win}"
     log "  ${w2_ova_unix} -> ${w2_vmx_win}"
+    log "  ${w3_ova_unix} -> ${w3_vmx_win}"
     return 0
   fi
 
@@ -278,7 +287,8 @@ run_import_ova() {
     \$jobs = @(
       @{ Ova = '$(to_windows_path "${cp_ova_unix}")'; Dest = '${cp_vmx_win}' },
       @{ Ova = '$(to_windows_path "${w1_ova_unix}")'; Dest = '${w1_vmx_win}' },
-      @{ Ova = '$(to_windows_path "${w2_ova_unix}")'; Dest = '${w2_vmx_win}' }
+      @{ Ova = '$(to_windows_path "${w2_ova_unix}")'; Dest = '${w2_vmx_win}' },
+      @{ Ova = '$(to_windows_path "${w3_ova_unix}")'; Dest = '${w3_vmx_win}' }
     )
 
     foreach (\$job in \$jobs) {
@@ -299,7 +309,8 @@ run_import_ova() {
   [[ -f "${cp_vmx_unix}" ]] || die "Control-plane VMX missing after import: ${cp_vmx_unix}"
   [[ -f "${w1_vmx_unix}" ]] || die "Worker1 VMX missing after import: ${w1_vmx_unix}"
   [[ -f "${w2_vmx_unix}" ]] || die "Worker2 VMX missing after import: ${w2_vmx_unix}"
-  log "Imported 3 OVA files into VMware output dir: ${VMWARE_OUTPUT_DIR_WIN}"
+  [[ -f "${w3_vmx_unix}" ]] || die "Worker3 VMX missing after import: ${w3_vmx_unix}"
+  log "Imported 4 OVA files into VMware output dir: ${VMWARE_OUTPUT_DIR_WIN}"
 }
 
 print_vm_section() {
@@ -314,17 +325,18 @@ print_vm_section() {
 
   printf '\n[%s]\n' "${label}"
   printf '%s\n' "sudo bash /opt/k8s-data-platform/scripts/set_static_ip.sh --ip ${node_ip} --prefix ${NETWORK_CIDR_PREFIX} --gateway ${GATEWAY} --dns ${DNS_SERVERS}${NET_INTERFACE:+ --iface ${NET_INTERFACE}}"
-  printf '%s\n' "sudo bash /opt/k8s-data-platform/scripts/set_hostname_hosts.sh --hostname ${node_hostname} --entry \"${CONTROL_PLANE_IP} ${CONTROL_PLANE_HOSTNAME}\" --entry \"${WORKER1_IP} ${WORKER1_HOSTNAME}\" --entry \"${WORKER2_IP} ${WORKER2_HOSTNAME}\""
+  printf '%s\n' "sudo bash /opt/k8s-data-platform/scripts/set_hostname_hosts.sh --hostname ${node_hostname} --entry \"${CONTROL_PLANE_IP} ${CONTROL_PLANE_HOSTNAME}\" --entry \"${WORKER1_IP} ${WORKER1_HOSTNAME}\" --entry \"${WORKER2_IP} ${WORKER2_HOSTNAME}\" --entry \"${WORKER3_IP} ${WORKER3_HOSTNAME}\""
   printf '%s\n' "hostname"
   printf '%s\n' "hostname -I"
   printf '%s\n' "ip route"
 }
 
 print_vm_commands() {
-  log "If the 3 imported VMs currently share the same IP, do this first in each VMware console."
+  log "If imported VMs currently share the same IP, do this first in each VMware console."
   print_vm_section "control-plane VM" "${CONTROL_PLANE_IP}" "${CONTROL_PLANE_HOSTNAME}"
   print_vm_section "worker-1 VM" "${WORKER1_IP}" "${WORKER1_HOSTNAME}"
   print_vm_section "worker-2 VM" "${WORKER2_IP}" "${WORKER2_HOSTNAME}"
+  print_vm_section "worker-3 VM" "${WORKER3_IP}" "${WORKER3_HOSTNAME}"
 }
 
 array_has() {
@@ -359,7 +371,7 @@ pause_for_vm_setup_if_needed() {
   fi
 
   log "Pause for VM setup: apply printed static-IP/hostname commands in each VM console first."
-  read -r -p "[init.sh] Press Enter after all 3 VMs have unique IP/hostname: "
+  read -r -p "[init.sh] Press Enter after all VMs have unique IP/hostname: "
 }
 
 apply_wsl_route() {
@@ -478,6 +490,7 @@ run_start() {
     --control-plane-ip "${CONTROL_PLANE_IP}"
     --worker1-ip "${WORKER1_IP}"
     --worker2-ip "${WORKER2_IP}"
+    --worker3-ip "${WORKER3_IP}"
     --gateway "${GATEWAY}"
     --dns-servers "${DNS_SERVERS}"
     --metallb-range "${METALLB_RANGE}"
@@ -525,6 +538,11 @@ while [[ $# -gt 0 ]]; do
     --worker2-ip)
       [[ $# -ge 2 ]] || die "--worker2-ip requires a value"
       WORKER2_IP="$2"
+      shift 2
+      ;;
+    --worker3-ip)
+      [[ $# -ge 2 ]] || die "--worker3-ip requires a value"
+      WORKER3_IP="$2"
       shift 2
       ;;
     --gateway)
@@ -719,6 +737,7 @@ fi
 require_ipv4 "control-plane IP" "${CONTROL_PLANE_IP}"
 require_ipv4 "worker1 IP" "${WORKER1_IP}"
 require_ipv4 "worker2 IP" "${WORKER2_IP}"
+require_ipv4 "worker3 IP" "${WORKER3_IP}"
 require_ipv4 "gateway" "${GATEWAY}"
 require_ipv4 "ingress LB IP" "${INGRESS_LB_IP}"
 [[ "${PRELOAD_WITH_RUNNER}" != "1" || "${PRELOAD_APPLY}" == "1" ]] || die "--preload-with-runner requires --preload-apply"
@@ -742,6 +761,7 @@ log "Planned node IPs"
 log "  ${CONTROL_PLANE_HOSTNAME} -> ${CONTROL_PLANE_IP}"
 log "  ${WORKER1_HOSTNAME} -> ${WORKER1_IP}"
 log "  ${WORKER2_HOSTNAME} -> ${WORKER2_IP}"
+log "  ${WORKER3_HOSTNAME} -> ${WORKER3_IP}"
 log "OVA dir -> ${OVA_DIR}"
 log "VMware output dir -> ${VMWARE_OUTPUT_DIR_WIN}"
 log "WSL route gateway -> ${WSL_ROUTE_GATEWAY}"

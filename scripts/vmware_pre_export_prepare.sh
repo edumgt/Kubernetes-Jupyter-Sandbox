@@ -9,6 +9,7 @@ CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-}"
 CONTROL_PLANE_NAME="${CONTROL_PLANE_NAME:-k8s-data-platform}"
 WORKER1_NAME="${WORKER1_NAME:-k8s-worker-1}"
 WORKER2_NAME="${WORKER2_NAME:-k8s-worker-2}"
+WORKER3_NAME="${WORKER3_NAME:-k8s-worker-3}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 REMOTE_REPO_ROOT="${REMOTE_REPO_ROOT:-/opt/k8s-data-platform}"
 REMOTE_HOME_REPO_ROOT="${REMOTE_HOME_REPO_ROOT:-/home/Kubernetes-Jupyter-Sandbox}"
@@ -27,12 +28,13 @@ SCP_OPTS=()
 CONTROL_PLANE_NODE_IP=""
 WORKER1_NODE_IP=""
 WORKER2_NODE_IP=""
+WORKER3_NODE_IP=""
 
 usage() {
   cat <<'EOF'
 Usage: bash scripts/vmware_pre_export_prepare.sh [options]
 
-Pre-export safety steps for existing VMware 3-node cluster:
+Pre-export safety steps for existing VMware cluster:
   1) Copy current local repository to /home/Kubernetes-Jupyter-Sandbox on each VM
   2) Check Kubernetes pod/service status right before VM stop
   3) Verify namespace pod images are harbor.local/*
@@ -44,6 +46,7 @@ Options:
   --control-plane-name NAME    Default: k8s-data-platform
   --worker1-name NAME          Default: k8s-worker-1
   --worker2-name NAME          Default: k8s-worker-2
+  --worker3-name NAME          Optional worker-3 hostname (default: k8s-worker-3)
   --env dev|prod               Default: dev
   --remote-repo-root PATH      Remote runtime repo root (default: /opt/k8s-data-platform)
   --remote-home-repo-root PATH Repo sync target on VM (default: /home/Kubernetes-Jupyter-Sandbox)
@@ -251,12 +254,18 @@ resolve_node_ips() {
       "${WORKER2_NAME}")
         WORKER2_NODE_IP="${node_ip}"
         ;;
+      "${WORKER3_NAME}")
+        WORKER3_NODE_IP="${node_ip}"
+        ;;
     esac
   done <<< "${rows}"
 
   [[ -n "${CONTROL_PLANE_NODE_IP}" ]] || CONTROL_PLANE_NODE_IP="${CONTROL_PLANE_IP}"
   [[ -n "${WORKER1_NODE_IP}" ]] || die "Unable to resolve ${WORKER1_NAME} IP from kubectl get nodes -o wide."
   [[ -n "${WORKER2_NODE_IP}" ]] || die "Unable to resolve ${WORKER2_NAME} IP from kubectl get nodes -o wide."
+  if [[ -z "${WORKER3_NODE_IP}" ]]; then
+    log "Worker-3 node '${WORKER3_NAME}' not found in current cluster; continuing without worker-3 pre-export sync/check target."
+  fi
 }
 
 run_k8s_status_checks() {
@@ -303,6 +312,9 @@ run_harbor_image_checks() {
   [[ "${bad}" -eq 0 ]] || die "Detected non-harbor image references in namespace ${NAMESPACE}."
 
   nodes_csv="${CONTROL_PLANE_NODE_IP},${WORKER1_NODE_IP},${WORKER2_NODE_IP}"
+  if [[ -n "${WORKER3_NODE_IP}" ]]; then
+    nodes_csv="${nodes_csv},${WORKER3_NODE_IP}"
+  fi
   local_check_script="${ROOT_DIR}/scripts/check_harbor_stack_images.sh"
   [[ -f "${local_check_script}" ]] || die "Local harbor check script not found: ${local_check_script}"
 
@@ -348,6 +360,11 @@ while [[ $# -gt 0 ]]; do
     --worker2-name)
       [[ $# -ge 2 ]] || die "--worker2-name requires a value"
       WORKER2_NAME="$2"
+      shift 2
+      ;;
+    --worker3-name)
+      [[ $# -ge 2 ]] || die "--worker3-name requires a value"
+      WORKER3_NAME="$2"
       shift 2
       ;;
     --env)
@@ -447,6 +464,9 @@ if [[ "${SKIP_REPO_COPY}" -eq 0 ]]; then
   sync_repo_to_host "${CONTROL_PLANE_NODE_IP}" "control-plane"
   sync_repo_to_host "${WORKER1_NODE_IP}" "worker-1"
   sync_repo_to_host "${WORKER2_NODE_IP}" "worker-2"
+  if [[ -n "${WORKER3_NODE_IP}" ]]; then
+    sync_repo_to_host "${WORKER3_NODE_IP}" "worker-3"
+  fi
 else
   log "Skipping repository copy (--skip-repo-copy)"
 fi

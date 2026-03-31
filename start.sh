@@ -10,6 +10,7 @@ DIST_DIR="${DIST_DIR:-C:/ffmpeg}"
 CONTROL_PLANE_NAME="${CONTROL_PLANE_NAME:-k8s-data-platform}"
 WORKER1_NAME="${WORKER1_NAME:-k8s-worker-1}"
 WORKER2_NAME="${WORKER2_NAME:-k8s-worker-2}"
+WORKER3_NAME="${WORKER3_NAME:-k8s-worker-3}"
 
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 OVERLAY="${OVERLAY:-dev-3node}"
@@ -25,6 +26,7 @@ STATIC_NETWORK=0
 CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-192.168.56.10}"
 WORKER1_IP="${WORKER1_IP:-192.168.56.11}"
 WORKER2_IP="${WORKER2_IP:-192.168.56.12}"
+WORKER3_IP="${WORKER3_IP:-192.168.56.13}"
 GATEWAY="${GATEWAY:-192.168.56.1}"
 NETWORK_CIDR_PREFIX="${NETWORK_CIDR_PREFIX:-24}"
 DNS_SERVERS="${DNS_SERVERS:-}"
@@ -54,13 +56,16 @@ NAMESPACE=""
 CONTROL_PLANE_SSH_HOST=""
 WORKER1_SSH_HOST=""
 WORKER2_SSH_HOST=""
+WORKER3_SSH_HOST=""
 OUTPUT_DIR_WSL=""
 CONTROL_PLANE_VMX_WIN=""
 CONTROL_PLANE_VMX_WSL=""
 WORKER1_VMX_WIN=""
 WORKER2_VMX_WIN=""
+WORKER3_VMX_WIN=""
 WORKER1_VMX_WSL=""
 WORKER2_VMX_WSL=""
+WORKER3_VMX_WSL=""
 RUN_PROVISION=1
 
 NEXUS_URL="${NEXUS_URL:-http://127.0.0.1:30091}"
@@ -89,17 +94,17 @@ usage() {
   cat <<'EOF'
 Usage: bash start.sh [options]
 
-End-to-end VMware 3-node pipeline:
-  1) VM 3대 재구성 + kubeadm join + dev-3node overlay + ingress/metallb
+End-to-end VMware pipeline (control-plane + worker1/2/3):
+  1) VM 재구성 + kubeadm join + dev-3node overlay + ingress/metallb
   2) 노드/파드/PVC/노드 배치 검증
   3) verify.sh URL 점검
   4) GitLab BE/FE repo seed (선택)
   5) Nexus 오프라인 캐시 워밍 (선택)
   6) 재부팅 복원 점검(선택)
-  7) 3개 OVA export (옵션)
+  7) 4개 OVA export (옵션)
 
 Default optimization:
-  - 기존 VMX 3개(control-plane/worker1/worker2)가 이미 있으면
+  - 기존 VMX 4개(control-plane/worker1/worker2/worker3)가 이미 있으면
     packer/provision 단계를 건너뛰고 VM 기동 + 검증 중심으로 실행합니다.
 
 Options:
@@ -109,6 +114,7 @@ Options:
   --control-plane-name NAME    Default: k8s-data-platform
   --worker1-name NAME          Default: k8s-worker-1
   --worker2-name NAME          Default: k8s-worker-2
+  --worker3-name NAME          Default: k8s-worker-3
 
   --env dev|prod               Default: dev
   --overlay NAME               Default: dev-3node
@@ -117,7 +123,7 @@ Options:
   --skip-build                 Reuse existing control-plane VM build
   --force-build                Force packer rebuild for control-plane VM
   --force-recreate-workers     Force worker clone recreation
-  --always-provision           Even if 3 VMX files exist, run provision/bootstrap step
+  --always-provision           Even if 4 VMX files exist, run provision/bootstrap step
   --no-force-build             (Legacy) same as default behavior
   --no-recreate-workers        (Legacy) same as default behavior
   --vm-start-mode gui|nogui    Default: nogui
@@ -126,6 +132,7 @@ Options:
   --control-plane-ip IP        Default: 192.168.56.10
   --worker1-ip IP              Default: 192.168.56.11
   --worker2-ip IP              Default: 192.168.56.12
+  --worker3-ip IP              Default: 192.168.56.13
   --gateway IP                 Default: 192.168.56.1
   --network-cidr-prefix N      Default: 24
   --dns-servers CSV            Default(static network): <gateway>,1.1.1.1,8.8.8.8
@@ -152,7 +159,7 @@ Options:
   --seed-gitlab-be-fe          Run scripts/demo_gitlab_repo_flow.sh on control-plane
   --gitlab-demo-password PASS  Demo user password for GitLab seed (default: 123456)
   --strict-harbor-check        Fail when Harbor(NodePort 30092) health check fails
-  --post-reboot-check          Power-cycle 3 VMs and re-run cluster/http checks
+  --post-reboot-check          Power-cycle VMs and re-run cluster/http checks
 
   --export                     Run vmware_export_3node_ova.sh from start.sh
   --skip-export                Skip vmware_export_3node_ova.sh (default)
@@ -168,6 +175,7 @@ Examples:
     --control-plane-ip 192.168.56.10 \
     --worker1-ip 192.168.56.11 \
     --worker2-ip 192.168.56.12 \
+    --worker3-ip 192.168.56.13 \
     --gateway 192.168.56.1 \
     --metallb-range 192.168.56.240-192.168.56.250 \
     --ingress-lb-ip 192.168.56.240
@@ -483,18 +491,20 @@ wait_for_ssh() {
 }
 
 resolve_worker_ssh_hosts() {
-  if [[ -n "${WORKER1_SSH_HOST}" && -n "${WORKER2_SSH_HOST}" ]]; then
+  if [[ -n "${WORKER1_SSH_HOST}" && -n "${WORKER2_SSH_HOST}" && -n "${WORKER3_SSH_HOST}" ]]; then
     return 0
   fi
 
   if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
     WORKER1_SSH_HOST="${WORKER1_IP}"
     WORKER2_SSH_HOST="${WORKER2_IP}"
+    WORKER3_SSH_HOST="${WORKER3_IP}"
     return 0
   fi
 
   WORKER1_SSH_HOST="$(wait_for_vm_ip "${WORKER1_VMX_WIN}" "${WORKER1_NAME}")"
   WORKER2_SSH_HOST="$(wait_for_vm_ip "${WORKER2_VMX_WIN}" "${WORKER2_NAME}")"
+  WORKER3_SSH_HOST="$(wait_for_vm_ip "${WORKER3_VMX_WIN}" "${WORKER3_NAME}")"
 }
 
 apply_node_runtime_fixes() {
@@ -511,7 +521,8 @@ apply_node_runtime_fixes() {
   for entry in \
     "control-plane:${CONTROL_PLANE_SSH_HOST}" \
     "worker-1:${WORKER1_SSH_HOST}" \
-    "worker-2:${WORKER2_SSH_HOST}"; do
+    "worker-2:${WORKER2_SSH_HOST}" \
+    "worker-3:${WORKER3_SSH_HOST}"; do
     label="${entry%%:*}"
     host="${entry#*:}"
     [[ -n "${host}" ]] || die "Unable to resolve SSH host for ${label}"
@@ -572,6 +583,7 @@ verify_solution_placement() {
   local redis_node
   local airflow_node
   local frontend_nodes
+  local worker3_pod_count
 
   backend_node="$(ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -l app=backend -o custom-columns=NODE:.spec.nodeName --no-headers | head -n 1 | tr -d '[:space:]'")"
   [[ -n "${backend_node}" ]] || die "backend pod node 확인 실패"
@@ -608,9 +620,16 @@ verify_solution_placement() {
   if printf '%s\n' "${frontend_nodes}" | grep -Fxq "${CONTROL_PLANE_NAME}"; then
     die "frontend pod must not be scheduled on control-plane (${CONTROL_PLANE_NAME})"
   fi
-  if ! printf '%s\n' "${frontend_nodes}" | grep -Fxq "${WORKER1_NAME}" && ! printf '%s\n' "${frontend_nodes}" | grep -Fxq "${WORKER2_NAME}"; then
-    die "frontend pod가 worker 노드(${WORKER1_NAME}/${WORKER2_NAME})에 스케줄되지 않았습니다."
+  if ! printf '%s\n' "${frontend_nodes}" | grep -Fxq "${WORKER1_NAME}" && ! printf '%s\n' "${frontend_nodes}" | grep -Fxq "${WORKER2_NAME}" && ! printf '%s\n' "${frontend_nodes}" | grep -Fxq "${WORKER3_NAME}"; then
+    die "frontend pod가 worker 노드(${WORKER1_NAME}/${WORKER2_NAME}/${WORKER3_NAME})에 스케줄되지 않았습니다."
   fi
+
+  worker3_pod_count="$(
+    ssh_capture_sudo "${host}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${NAMESPACE}' get pods -o custom-columns=NODE:.spec.nodeName --no-headers | awk '\$1 == \"${WORKER3_NAME}\" { c++ } END { print c+0 }'" \
+      | tr -d '\r[:space:]'
+  )"
+  [[ "${worker3_pod_count}" =~ ^[0-9]+$ ]] || worker3_pod_count=0
+  (( worker3_pod_count > 0 )) || die "namespace ${NAMESPACE} workload가 ${WORKER3_NAME}에 배치되지 않았습니다."
 }
 
 validate_cluster_state() {
@@ -621,6 +640,7 @@ validate_cluster_state() {
   remote_kubectl "${host}" "wait --for=condition=Ready node/${CONTROL_PLANE_NAME} --timeout=420s"
   remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER1_NAME} --timeout=420s"
   remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER2_NAME} --timeout=420s"
+  remote_kubectl "${host}" "wait --for=condition=Ready node/${WORKER3_NAME} --timeout=420s"
 
   for deploy in backend jupyter frontend gitlab nexus redis; do
     remote_kubectl "${host}" "-n ${NAMESPACE} wait --for=condition=Available deployment/${deploy} --timeout=900s"
@@ -914,15 +934,17 @@ run_nexus_prime() {
 }
 
 run_post_reboot_check() {
-  log "Post-reboot check: power-cycling 3 VMs"
+  log "Post-reboot check: power-cycling control-plane + 3 workers"
   stop_vm_if_running "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
   stop_vm_if_running "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
   stop_vm_if_running "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
+  stop_vm_if_running "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
   sleep 3
 
   start_vm_if_needed "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
   start_vm_if_needed "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
   start_vm_if_needed "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
+  start_vm_if_needed "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
 
   if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
     CONTROL_PLANE_SSH_HOST="${CONTROL_PLANE_IP}"
@@ -964,6 +986,11 @@ while [[ $# -gt 0 ]]; do
     --worker2-name)
       [[ $# -ge 2 ]] || die "--worker2-name requires a value"
       WORKER2_NAME="$2"
+      shift 2
+      ;;
+    --worker3-name)
+      [[ $# -ge 2 ]] || die "--worker3-name requires a value"
+      WORKER3_NAME="$2"
       shift 2
       ;;
     --env)
@@ -1027,6 +1054,11 @@ while [[ $# -gt 0 ]]; do
     --worker2-ip)
       [[ $# -ge 2 ]] || die "--worker2-ip requires a value"
       WORKER2_IP="$2"
+      shift 2
+      ;;
+    --worker3-ip)
+      [[ $# -ge 2 ]] || die "--worker3-ip requires a value"
+      WORKER3_IP="$2"
       shift 2
       ;;
     --gateway)
@@ -1235,13 +1267,14 @@ if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
   [[ -n "${CONTROL_PLANE_IP}" ]] || die "CONTROL_PLANE_IP is required with --static-network"
   [[ -n "${WORKER1_IP}" ]] || die "WORKER1_IP is required with --static-network"
   [[ -n "${WORKER2_IP}" ]] || die "WORKER2_IP is required with --static-network"
+  [[ -n "${WORKER3_IP}" ]] || die "WORKER3_IP is required with --static-network"
   [[ -n "${GATEWAY}" ]] || die "GATEWAY is required with --static-network"
   if [[ -z "${DNS_SERVERS}" ]]; then
     DNS_SERVERS="${GATEWAY},1.1.1.1,8.8.8.8"
   fi
 fi
 
-if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER2_NAME}" || "${WORKER1_NAME}" == "${WORKER2_NAME}" ]]; then
+if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER2_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER3_NAME}" || "${WORKER1_NAME}" == "${WORKER2_NAME}" || "${WORKER1_NAME}" == "${WORKER3_NAME}" || "${WORKER2_NAME}" == "${WORKER3_NAME}" ]]; then
   die "VM names must be unique."
 fi
 
@@ -1256,10 +1289,12 @@ NAMESPACE="data-platform-${ENVIRONMENT}"
 CONTROL_PLANE_VMX_WSL="${OUTPUT_DIR_WSL}/${CONTROL_PLANE_NAME}.vmx"
 WORKER1_VMX_WSL="${OUTPUT_DIR_WSL}/${WORKER1_NAME}/${WORKER1_NAME}.vmx"
 WORKER2_VMX_WSL="${OUTPUT_DIR_WSL}/${WORKER2_NAME}/${WORKER2_NAME}.vmx"
+WORKER3_VMX_WSL="${OUTPUT_DIR_WSL}/${WORKER3_NAME}/${WORKER3_NAME}.vmx"
 
 CONTROL_PLANE_VMX_WIN="$(normalize_win_path "$(to_windows_path "${CONTROL_PLANE_VMX_WSL}")")"
 WORKER1_VMX_WIN="$(normalize_win_path "$(to_windows_path "${WORKER1_VMX_WSL}")")"
 WORKER2_VMX_WIN="$(normalize_win_path "$(to_windows_path "${WORKER2_VMX_WSL}")")"
+WORKER3_VMX_WIN="$(normalize_win_path "$(to_windows_path "${WORKER3_VMX_WSL}")")"
 
 if [[ "${SKIP_BUILD}" -eq 0 && "${FORCE_BUILD}" -eq 0 && -f "${CONTROL_PLANE_VMX_WSL}" ]]; then
   SKIP_BUILD=1
@@ -1267,9 +1302,9 @@ if [[ "${SKIP_BUILD}" -eq 0 && "${FORCE_BUILD}" -eq 0 && -f "${CONTROL_PLANE_VMX
 fi
 
 if [[ "${ALWAYS_PROVISION}" -eq 0 && "${FORCE_BUILD}" -eq 0 && "${FORCE_RECREATE_WORKERS}" -eq 0 ]]; then
-  if [[ -f "${CONTROL_PLANE_VMX_WSL}" && -f "${WORKER1_VMX_WSL}" && -f "${WORKER2_VMX_WSL}" ]]; then
+  if [[ -f "${CONTROL_PLANE_VMX_WSL}" && -f "${WORKER1_VMX_WSL}" && -f "${WORKER2_VMX_WSL}" && -f "${WORKER3_VMX_WSL}" ]]; then
     RUN_PROVISION=0
-    log "Existing 3-node VMX set detected. Provision/bootstrap step will be skipped."
+    log "Existing VMX set detected (control-plane + worker1/2/3). Provision/bootstrap step will be skipped."
   fi
 fi
 
@@ -1291,7 +1326,7 @@ if [[ "${SKIP_NEXUS_PRIME}" -eq 0 ]]; then
   log "  - scripts/setup_nexus_offline.sh (remote)"
 fi
 if [[ "${POST_REBOOT_CHECK}" -eq 1 ]]; then
-  log "  - Power-cycle 3 VMs + re-check"
+  log "  - Power-cycle control-plane + worker1/2/3 + re-check"
 fi
 if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
   log "  - scripts/vmware_export_3node_ova.sh"
@@ -1316,13 +1351,14 @@ fi
 STEP_INDEX=1
 
 if [[ "${RUN_PROVISION}" -eq 1 ]]; then
-  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Rebuild/provision VMware 3-node cluster"
+  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Rebuild/provision VMware cluster (control-plane + worker1/2/3)"
   provision_cmd=(
     bash "${ROOT_DIR}/scripts/vmware_provision_3node.sh"
     --vars-file "${PACKER_VARS}"
     --control-plane-name "${CONTROL_PLANE_NAME}"
     --worker1-name "${WORKER1_NAME}"
     --worker2-name "${WORKER2_NAME}"
+    --worker3-name "${WORKER3_NAME}"
     --vmrun "${VMRUN_WIN}"
     --powershell-bin "${POWERSHELL_BIN}"
     --env "${ENVIRONMENT}"
@@ -1351,6 +1387,7 @@ if [[ "${RUN_PROVISION}" -eq 1 ]]; then
       --control-plane-ip "${CONTROL_PLANE_IP}"
       --worker1-ip "${WORKER1_IP}"
       --worker2-ip "${WORKER2_IP}"
+      --worker3-ip "${WORKER3_IP}"
       --gateway "${GATEWAY}"
       --network-cidr-prefix "${NETWORK_CIDR_PREFIX}"
       --dns-servers "${DNS_SERVERS}"
@@ -1377,13 +1414,15 @@ if [[ "${RUN_PROVISION}" -eq 1 ]]; then
 
   "${provision_cmd[@]}"
 else
-  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Reuse existing VMware 3-node VMs (no packer/delete)"
+  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Reuse existing VMware VMs (no packer/delete)"
   [[ -f "${CONTROL_PLANE_VMX_WSL}" ]] || die "Missing VMX: ${CONTROL_PLANE_VMX_WSL}"
   [[ -f "${WORKER1_VMX_WSL}" ]] || die "Missing VMX: ${WORKER1_VMX_WSL}"
   [[ -f "${WORKER2_VMX_WSL}" ]] || die "Missing VMX: ${WORKER2_VMX_WSL}"
+  [[ -f "${WORKER3_VMX_WSL}" ]] || die "Missing VMX: ${WORKER3_VMX_WSL}"
   start_vm_if_needed "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
   start_vm_if_needed "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
   start_vm_if_needed "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
+  start_vm_if_needed "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
 fi
 
 STEP_INDEX=$(( STEP_INDEX + 1 ))
@@ -1429,7 +1468,7 @@ fi
 
 if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
   STEP_INDEX=$(( STEP_INDEX + 1 ))
-  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Export 3-node OVA artifacts"
+  log "Step ${STEP_INDEX}/${TOTAL_STEPS}: Export OVA artifacts (control-plane + worker1/2/3)"
   export_cmd=(
     bash "${ROOT_DIR}/scripts/vmware_export_3node_ova.sh"
     --vars-file "${PACKER_VARS}"
@@ -1437,6 +1476,7 @@ if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
     --control-plane-name "${CONTROL_PLANE_NAME}"
     --worker1-name "${WORKER1_NAME}"
     --worker2-name "${WORKER2_NAME}"
+    --worker3-name "${WORKER3_NAME}"
     --vmrun "${VMRUN_WIN}"
   )
   "${export_cmd[@]}"
@@ -1460,6 +1500,7 @@ if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
   log "  ${DIST_DIR}/${CONTROL_PLANE_NAME}.ova"
   log "  ${DIST_DIR}/${WORKER1_NAME}.ova"
   log "  ${DIST_DIR}/${WORKER2_NAME}.ova"
+  log "  ${DIST_DIR}/${WORKER3_NAME}.ova"
 else
   log "OVA export is skipped by default. Run:"
   log "  bash ./ovabuild.sh --vars-file ${PACKER_VARS} --control-plane-ip ${CONTROL_PLANE_SSH_HOST} --dist-dir ${DIST_DIR}"
