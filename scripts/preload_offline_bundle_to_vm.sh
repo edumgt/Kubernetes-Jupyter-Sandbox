@@ -19,6 +19,8 @@ IMAGE_TAG="${IMAGE_TAG:-latest}"
 SKIP_BUILD=0
 APPLY_MANIFESTS=0
 WITH_RUNNER=0
+required_images=()
+missing_required_images=()
 
 usage() {
   cat <<'EOF'
@@ -149,6 +151,112 @@ remote_sudo() {
   ssh_run "${host}" "sudo bash -lc $(printf '%q' "${command}")"
 }
 
+resolve_remote_import_script() {
+  local host="$1"
+  local candidate
+  local candidates=(
+    "${REMOTE_BUNDLE_DIR}/k8s/scripts/import_offline_bundle.sh"
+    "/opt/k8s-data-platform/scripts/import_offline_bundle.sh"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    if ssh_run "${host}" "test -f '${candidate}' && bash '${candidate}' --help >/dev/null 2>&1"; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+remote_import_supports_registry_overrides() {
+  local host="$1"
+  local script_path="$2"
+  local help_output
+
+  help_output="$(ssh_run "${host}" "bash '${script_path}' --help 2>&1" || true)"
+
+  grep -Fq -- "--image-registry" <<< "${help_output}" \
+    && grep -Fq -- "--image-namespace" <<< "${help_output}" \
+    && grep -Fq -- "--image-tag" <<< "${help_output}"
+}
+
+sanitize_archive_name() {
+  printf '%s' "$1" | tr '/:' '-'
+}
+
+initialize_required_images() {
+  required_images=(
+    "$(platform_support_image platform-python 3.12-slim)"
+    "$(platform_support_image platform-python 3.12)"
+    "$(platform_support_image platform-node 22.22.0-bookworm-slim)"
+    "$(platform_support_image platform-nginx 1.27-alpine)"
+    "$(platform_support_image platform-airflow-base 2.10.5-python3.12)"
+    "$(platform_support_image platform-mongodb 7.0)"
+    "$(platform_support_image platform-redis 7-alpine)"
+    "$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
+    "$(platform_support_image platform-gitlab-runner alpine-v17.10.0)"
+    "$(platform_support_image platform-gitlab-runner-helper x86_64-v17.10.0)"
+    "$(platform_support_image platform-nexus3 3.90.1-alpine)"
+    "$(platform_support_image platform-kaniko-executor v1.23.2-debug)"
+    "$(platform_support_image platform-kubectl latest)"
+    "$(platform_support_image platform-bash 5.2)"
+    "$(platform_support_image platform-alpine 3.20)"
+    "$(platform_support_image platform-busybox 1.36)"
+    "$(platform_support_image platform-flannel v0.28.1)"
+    "$(platform_support_image platform-flannel-cni-plugin v1.9.0-flannel1)"
+    "$(platform_support_image platform-metallb-controller v0.14.8)"
+    "$(platform_support_image platform-metallb-speaker v0.14.8)"
+    "$(platform_support_image platform-ingress-nginx-controller v1.12.2)"
+    "$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.5.3)"
+    "$(platform_support_image platform-kubernetes-dashboard v2.7.0)"
+    "$(platform_support_image platform-kubernetes-dashboard-metrics-scraper v1.0.8)"
+    "$(platform_app_image backend)"
+    "$(platform_app_image frontend)"
+    "$(platform_app_image airflow)"
+    "$(platform_app_image jupyter)"
+  )
+}
+
+collect_missing_required_images() {
+  local host="$1"
+  local images_on_host
+  local ref
+
+  missing_required_images=()
+  images_on_host="$(remote_sudo "${host}" "ctr -n k8s.io images ls -q | sort -u")"
+  for ref in "${required_images[@]}"; do
+    if ! grep -Fqx "${ref}" <<< "${images_on_host}"; then
+      missing_required_images+=("${ref}")
+    fi
+  done
+}
+
+recover_missing_required_images() {
+  local host="$1"
+  local ref archive_name remote_archive
+
+  if [[ "${#missing_required_images[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  log "Attempting targeted recovery for ${#missing_required_images[@]} missing image(s)."
+  for ref in "${missing_required_images[@]}"; do
+    archive_name="$(sanitize_archive_name "${ref}").tar"
+    remote_archive="${REMOTE_BUNDLE_DIR}/images/${archive_name}"
+
+    log "Recovering missing image: ${ref}"
+    remote_sudo "${host}" "test -f '${remote_archive}'" \
+      || die "Missing archive for ${ref}: ${remote_archive}"
+
+    if ! remote_sudo "${host}" "ctr -n k8s.io images import --platform linux/amd64 '${remote_archive}'"; then
+      log "Primary recovery import failed for ${ref}; retrying with --all-platforms."
+      remote_sudo "${host}" "ctr -n k8s.io images import --all-platforms '${remote_archive}'" \
+        || die "Unable to recover image ${ref}"
+    fi
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --control-plane-ip)
@@ -252,6 +360,7 @@ if [[ -n "${SSH_PASSWORD}" ]]; then
   require_command sshpass
 fi
 
+initialize_required_images
 build_ssh_opts
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
@@ -272,15 +381,53 @@ log "Copying offline bundle to ${CONTROL_PLANE_IP}"
 scp_copy_dir "${BUNDLE_DIR}/." "${CONTROL_PLANE_IP}" "${REMOTE_BUNDLE_DIR}/"
 
 log "Importing image archives on target VM"
-import_cmd="bash /opt/k8s-data-platform/scripts/import_offline_bundle.sh --bundle-dir '${REMOTE_BUNDLE_DIR}' --env '${ENVIRONMENT}'"
-import_cmd="${import_cmd} --image-registry '${IMAGE_REGISTRY}' --image-namespace '${IMAGE_NAMESPACE}' --image-tag '${IMAGE_TAG}'"
+import_script_path="$(
+  resolve_remote_import_script "${CONTROL_PLANE_IP}"
+)" || die "Unable to locate import_offline_bundle.sh on target VM."
+log "Using remote import script: ${import_script_path}"
+
+import_cmd="bash '${import_script_path}' --bundle-dir '${REMOTE_BUNDLE_DIR}' --env '${ENVIRONMENT}'"
+if remote_import_supports_registry_overrides "${CONTROL_PLANE_IP}" "${import_script_path}"; then
+  import_cmd="${import_cmd} --image-registry '${IMAGE_REGISTRY}' --image-namespace '${IMAGE_NAMESPACE}' --image-tag '${IMAGE_TAG}'"
+else
+  log "Remote import script does not support registry override options; proceeding without overrides."
+fi
 if [[ "${APPLY_MANIFESTS}" == "1" ]]; then
   import_cmd="${import_cmd} --apply"
 fi
 if [[ "${WITH_RUNNER}" == "1" ]]; then
   import_cmd="${import_cmd} --with-runner"
 fi
-remote_sudo "${CONTROL_PLANE_IP}" "${import_cmd}"
+
+remote_sudo "${CONTROL_PLANE_IP}" "command -v ctr >/dev/null 2>&1" \
+  || die "ctr command not available on target VM."
+
+primary_import_failed=0
+if ! remote_sudo "${CONTROL_PLANE_IP}" "${import_cmd}"; then
+  primary_import_failed=1
+  log "Primary import command failed; continuing with targeted recovery."
+fi
+
+max_recovery_rounds=4
+recovery_round=0
+while true; do
+  collect_missing_required_images "${CONTROL_PLANE_IP}"
+  if [[ "${#missing_required_images[@]}" -eq 0 ]]; then
+    break
+  fi
+
+  if [[ "${recovery_round}" -ge "${max_recovery_rounds}" ]]; then
+    die "Missing required images remain after recovery: $(IFS=,; printf '%s' "${missing_required_images[*]}")"
+  fi
+
+  recovery_round=$((recovery_round + 1))
+  log "Detected ${#missing_required_images[@]} missing required image(s) (recovery round ${recovery_round}/${max_recovery_rounds})."
+  recover_missing_required_images "${CONTROL_PLANE_IP}"
+done
+
+if [[ "${primary_import_failed}" -eq 1 ]]; then
+  log "Primary import reported an error, but targeted recovery completed successfully."
+fi
 
 log "Offline bundle preload completed."
 log "Target VM: ${CONTROL_PLANE_IP}"
