@@ -112,7 +112,7 @@ bash scripts/check_offline_readiness.sh
 
 이 스크립트는 아래를 확인합니다.
 
-- repo/bundle 내부 Flannel, ingress-nginx, MetalLB 매니페스트 존재 여부
+- repo/bundle 내부 Calico, ingress-nginx, MetalLB 매니페스트 존재 여부
 - containerd 에 핵심 `harbor.local/data-platform/*` 이미지가 preload 되어 있는지
 - 현재 클러스터에 `ErrImagePull` / `ImagePullBackOff`가 남아 있는지
 
@@ -562,7 +562,7 @@ bash scripts/bootstrap_3node_k8s_ova.sh --config /tmp/3node-cluster.env
 |---|---|---|
 | 다른 PC VMware에 OVA 3개 올려 3-node 구성 | 조건부 가능 | 3개 OVA가 각각 control-plane/worker1/worker2 역할이어야 함, IP/SSH 경로 확보 후 `bootstrap_3node_k8s_ova.sh` 실행 |
 | `*-ami.raw`를 S3 업로드 후 AMI 등록, EC2 기동 | 조건부 가능 | AWS VM Import 권한/역할(`vmimport`)과 S3 버킷 준비, import 완료 후 AMI로 인스턴스 기동 |
-| EC2 VM 3대로 kubeadm 클러스터링 | 조건부 가능 | VPC/SG에서 `6443`, `10250`, CNI 포트(Flannel 기본 `8472/udp`) 및 SSH 허용, control-plane에서 worker join 수행 |
+| EC2 VM 3대로 kubeadm 클러스터링 | 조건부 가능 | VPC/SG에서 `6443`, `10250`, CNI 포트(Calico VXLAN 기본 `4789/udp`) 및 SSH 허용, control-plane에서 worker join 수행 |
 | ISO 3개를 VirtualBox에 올려 바로 3-node 구성 | 바로는 불가 | 현재 생성 ISO는 Ubuntu 설치 ISO 복사본이며 pre-provisioned 이미지가 아님. OS 설치 + kubeadm/init/join + overlay 적용이 추가로 필요 |
 
 중요:

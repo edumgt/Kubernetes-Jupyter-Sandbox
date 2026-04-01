@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-METALLB_VERSION="${METALLB_VERSION:-v0.14.8}"
-INGRESS_NGINX_VERSION="${INGRESS_NGINX_VERSION:-controller-v1.12.2}"
+METALLB_VERSION="${METALLB_VERSION:-v0.15.3}"
+INGRESS_NGINX_VERSION="${INGRESS_NGINX_VERSION:-controller-v1.14.1}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/image_registry.sh
 source "${SCRIPT_DIR}/lib/image_registry.sh"

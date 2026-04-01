@@ -6,12 +6,11 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOCAL_MANIFEST_DIR_DEFAULT="${ROOT_DIR}/offline/manifests"
 REMOTE_BUNDLE_MANIFEST_DIR="/opt/k8s-data-platform/offline-bundle/k8s/manifests"
 
-DASHBOARD_NAMESPACE="kubernetes-dashboard"
-DASHBOARD_MANIFEST="${DASHBOARD_MANIFEST:-}"
-INGRESS_NAME="${INGRESS_NAME:-kubernetes-dashboard-ingress}"
+HEADLAMP_NAMESPACE="headlamp"
+HEADLAMP_MANIFEST="${HEADLAMP_MANIFEST:-}"
+INGRESS_NAME="${INGRESS_NAME:-headlamp-ingress}"
 INGRESS_CLASS_NAME="${INGRESS_CLASS_NAME:-nginx}"
 INGRESS_HOST="${INGRESS_HOST:-dashboard.platform.local}"
-TOKEN_DURATION="${TOKEN_DURATION:-24h}"
 
 SKIP_INGRESS=0
 SKIP_ADMIN_BINDING=0
@@ -21,21 +20,22 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/setup_kubernetes_dashboard.sh [options]
 
-Installs Kubernetes Dashboard from the air-gap manifest, then optionally
-creates ingress and an admin ServiceAccount binding.
+Installs Headlamp from the air-gap manifest and optionally creates ingress.
+
+This script keeps its original filename for backward compatibility, but it now
+manages Headlamp instead of Kubernetes Dashboard.
 
 Options:
-  --manifest PATH             Dashboard manifest path.
+  --manifest PATH             Headlamp manifest path.
                               Defaults:
-                                1) /opt/k8s-data-platform/offline-bundle/k8s/manifests/kubernetes-dashboard.yaml
-                                2) ./offline/manifests/kubernetes-dashboard.yaml
-  --ingress-host HOST         Dashboard ingress host (default: dashboard.platform.local)
-  --ingress-name NAME         Ingress resource name (default: kubernetes-dashboard-ingress)
+                                1) /opt/k8s-data-platform/offline-bundle/k8s/manifests/headlamp.yaml
+                                2) ./offline/manifests/headlamp.yaml
+  --ingress-host HOST         Headlamp ingress host (default: dashboard.platform.local)
+  --ingress-name NAME         Ingress resource name (default: headlamp-ingress)
   --ingress-class NAME        IngressClass name (default: nginx)
-  --token-duration DURATION   Token duration for --print-token (default: 24h)
   --skip-ingress              Skip ingress creation.
-  --skip-admin-binding        Skip cluster-admin ServiceAccount binding.
-  --print-token               Print dashboard-admin login token after setup.
+  --skip-admin-binding        Deprecated no-op kept for compatibility.
+  --print-token               Deprecated no-op kept for compatibility.
   -h, --help                  Show this help.
 EOF
 }
@@ -68,24 +68,24 @@ run_kubectl() {
 }
 
 resolve_manifest_path() {
-  if [[ -n "${DASHBOARD_MANIFEST}" ]]; then
-    printf '%s' "${DASHBOARD_MANIFEST}"
+  if [[ -n "${HEADLAMP_MANIFEST}" ]]; then
+    printf '%s' "${HEADLAMP_MANIFEST}"
     return 0
   fi
 
-  if [[ -f "${REMOTE_BUNDLE_MANIFEST_DIR}/kubernetes-dashboard.yaml" ]]; then
-    printf '%s' "${REMOTE_BUNDLE_MANIFEST_DIR}/kubernetes-dashboard.yaml"
+  if [[ -f "${REMOTE_BUNDLE_MANIFEST_DIR}/headlamp.yaml" ]]; then
+    printf '%s' "${REMOTE_BUNDLE_MANIFEST_DIR}/headlamp.yaml"
     return 0
   fi
 
-  printf '%s' "${LOCAL_MANIFEST_DIR_DEFAULT}/kubernetes-dashboard.yaml"
+  printf '%s' "${LOCAL_MANIFEST_DIR_DEFAULT}/headlamp.yaml"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --manifest)
       [[ $# -ge 2 ]] || die "--manifest requires a value"
-      DASHBOARD_MANIFEST="$2"
+      HEADLAMP_MANIFEST="$2"
       shift 2
       ;;
     --ingress-host)
@@ -101,11 +101,6 @@ while [[ $# -gt 0 ]]; do
     --ingress-class)
       [[ $# -ge 2 ]] || die "--ingress-class requires a value"
       INGRESS_CLASS_NAME="$2"
-      shift 2
-      ;;
-    --token-duration)
-      [[ $# -ge 2 ]] || die "--token-duration requires a value"
-      TOKEN_DURATION="$2"
       shift 2
       ;;
     --skip-ingress)
@@ -133,25 +128,23 @@ done
 require_command kubectl
 
 MANIFEST_PATH="$(resolve_manifest_path)"
-[[ -f "${MANIFEST_PATH}" ]] || die "Dashboard manifest not found: ${MANIFEST_PATH}"
+[[ -f "${MANIFEST_PATH}" ]] || die "Headlamp manifest not found: ${MANIFEST_PATH}"
 
-log "Applying dashboard manifest: ${MANIFEST_PATH}"
+log "Applying Headlamp manifest: ${MANIFEST_PATH}"
 run_kubectl apply -f "${MANIFEST_PATH}"
 
-log "Waiting for dashboard rollouts"
-run_kubectl -n "${DASHBOARD_NAMESPACE}" rollout status deploy/kubernetes-dashboard --timeout=300s
-run_kubectl -n "${DASHBOARD_NAMESPACE}" rollout status deploy/dashboard-metrics-scraper --timeout=300s
+log "Waiting for Headlamp rollout"
+run_kubectl -n "${HEADLAMP_NAMESPACE}" rollout status deploy/headlamp --timeout=300s
 
 if [[ "${SKIP_INGRESS}" == "0" ]]; then
-  log "Creating/updating dashboard ingress (${INGRESS_HOST})"
+  log "Creating/updating Headlamp ingress (${INGRESS_HOST})"
   cat <<EOF_ING | run_kubectl apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: ${INGRESS_NAME}
-  namespace: ${DASHBOARD_NAMESPACE}
+  namespace: ${HEADLAMP_NAMESPACE}
   annotations:
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/service-upstream: "true"
@@ -165,19 +158,14 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: kubernetes-dashboard
+                name: headlamp
                 port:
-                  number: 443
+                  number: 80
 EOF_ING
 fi
 
-if [[ "${SKIP_ADMIN_BINDING}" == "0" ]]; then
-  log "Creating/updating dashboard-admin ServiceAccount + cluster-admin binding"
-  run_kubectl -n "${DASHBOARD_NAMESPACE}" create serviceaccount dashboard-admin --dry-run=client -o yaml | run_kubectl apply -f -
-  run_kubectl create clusterrolebinding dashboard-admin \
-    --clusterrole=cluster-admin \
-    --serviceaccount="${DASHBOARD_NAMESPACE}:dashboard-admin" \
-    --dry-run=client -o yaml | run_kubectl apply -f -
+if [[ "${SKIP_ADMIN_BINDING}" == "1" ]]; then
+  log "--skip-admin-binding is deprecated and ignored for Headlamp"
 fi
 
 ingress_ip="$(
@@ -186,13 +174,12 @@ ingress_ip="$(
 )"
 
 printf '\n'
-log "Dashboard URL: http://${INGRESS_HOST}/"
+log "Headlamp URL: http://${INGRESS_HOST}/"
 if [[ -n "${ingress_ip}" ]]; then
   log "hosts entry: ${ingress_ip} ${INGRESS_HOST}"
 fi
-log "Token command: kubectl -n ${DASHBOARD_NAMESPACE} create token dashboard-admin --duration=${TOKEN_DURATION}"
+log "Headlamp runs with the in-cluster admin ServiceAccount defined in headlamp.yaml"
 
-if [[ "${PRINT_TOKEN}" == "1" && "${SKIP_ADMIN_BINDING}" == "0" ]]; then
-  printf '\n'
-  run_kubectl -n "${DASHBOARD_NAMESPACE}" create token dashboard-admin --duration="${TOKEN_DURATION}"
+if [[ "${PRINT_TOKEN}" == "1" ]]; then
+  log "--print-token is deprecated and ignored for Headlamp"
 fi

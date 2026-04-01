@@ -195,38 +195,38 @@
     group: "{{ kubernetes_admin_user }}"
     mode: '0600'
 
-- name: Check bundled Flannel manifest in repo
+- name: Check bundled CNI manifest in repo
   stat:
-    path: "{{ playbook_dir }}/../offline/manifests/kube-flannel.yml"
+    path: "{{ playbook_dir }}/../offline/manifests/{{ kubernetes_cni_manifest_filename }}"
   register: kubernetes_cni_manifest_local
   delegate_to: localhost
   become: false
 
-- name: Copy bundled Flannel manifest
+- name: Copy bundled CNI manifest
   copy:
-    src: "{{ playbook_dir }}/../offline/manifests/kube-flannel.yml"
-    dest: /tmp/kube-flannel.yml
+    src: "{{ playbook_dir }}/../offline/manifests/{{ kubernetes_cni_manifest_filename }}"
+    dest: "{{ kubernetes_cni_manifest_tmp_path }}"
     mode: '0644'
   when: kubernetes_cni_manifest_local.stat.exists
 
-- name: Download Flannel manifest
+- name: Download CNI manifest
   get_url:
     url: "{{ kubernetes_cni_manifest_url }}"
-    dest: /tmp/kube-flannel.yml
+    dest: "{{ kubernetes_cni_manifest_tmp_path }}"
     mode: '0644'
   when: not kubernetes_cni_manifest_local.stat.exists
 
-- name: Apply Flannel CNI manifest
+- name: Apply CNI manifest
   command:
     argv:
       - kubectl
       - apply
       - -f
-      - /tmp/kube-flannel.yml
+      - "{{ kubernetes_cni_manifest_tmp_path }}"
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  register: flannel_apply
-  changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
+  register: cni_apply
+  changed_when: "'created' in cni_apply.stdout or 'configured' in cni_apply.stdout"
 
 - name: Allow workloads on the single control-plane node
   command:

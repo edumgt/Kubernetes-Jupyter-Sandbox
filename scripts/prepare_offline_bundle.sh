@@ -150,7 +150,7 @@ copy_k8s_assets() {
 - \`../images\`: Docker load / Kubernetes container runtime import 용 OCI tar archive
 - \`./infra/k8s\`: dev/prod overlay 와 runner overlay 를 포함한 Kubernetes manifests
 - \`./scripts/import_offline_bundle.sh\`: 이미지 import 와 overlay apply helper
-- \`./manifests\`: Flannel / ingress-nginx / MetalLB 로컬 매니페스트
+- \`./manifests\`: Calico / ingress-nginx / MetalLB / Headlamp 로컬 매니페스트
 - \`./scripts/setup_nexus_offline.sh\`: Nexus repo/bootstrap + Python/npm cache warm-up
 - \`./scripts/check_offline_readiness.sh\`: 오프라인 준비 상태 점검
 - \`./scripts/check_vm_airgap_status.sh\`: VM 기반 air-gap 상태 점검 (node/pod/registry refs)

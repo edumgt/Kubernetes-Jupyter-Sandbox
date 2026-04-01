@@ -174,14 +174,14 @@ SUPPORT_IMAGES=(
   "bash:5.2|$(platform_support_image platform-bash 5.2)"
   "alpine:3.20|$(platform_support_image platform-alpine 3.20)"
   "busybox:1.36|$(platform_support_image platform-busybox 1.36)"
-  "ghcr.io/flannel-io/flannel:v0.28.1|$(platform_support_image platform-flannel v0.28.1)"
-  "ghcr.io/flannel-io/flannel-cni-plugin:v1.9.0-flannel1|$(platform_support_image platform-flannel-cni-plugin v1.9.0-flannel1)"
-  "quay.io/metallb/controller:v0.14.8|$(platform_support_image platform-metallb-controller v0.14.8)"
-  "quay.io/metallb/speaker:v0.14.8|$(platform_support_image platform-metallb-speaker v0.14.8)"
-  "registry.k8s.io/ingress-nginx/controller:v1.12.2|$(platform_support_image platform-ingress-nginx-controller v1.12.2)"
-  "registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.3|$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.5.3)"
-  "kubernetesui/dashboard:v2.7.0|$(platform_support_image platform-kubernetes-dashboard v2.7.0)"
-  "kubernetesui/metrics-scraper:v1.0.8|$(platform_support_image platform-kubernetes-dashboard-metrics-scraper v1.0.8)"
+  "quay.io/calico/cni:v3.31.2|$(platform_support_image platform-calico-cni v3.31.2)"
+  "quay.io/calico/node:v3.31.2|$(platform_support_image platform-calico-node v3.31.2)"
+  "quay.io/calico/kube-controllers:v3.31.2|$(platform_support_image platform-calico-kube-controllers v3.31.2)"
+  "quay.io/metallb/controller:v0.15.3|$(platform_support_image platform-metallb-controller v0.15.3)"
+  "quay.io/metallb/speaker:v0.15.3|$(platform_support_image platform-metallb-speaker v0.15.3)"
+  "registry.k8s.io/ingress-nginx/controller:v1.14.1|$(platform_support_image platform-ingress-nginx-controller v1.14.1)"
+  "registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.5|$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.6.5)"
+  "ghcr.io/headlamp-k8s/headlamp:v0.38.0|$(platform_support_image platform-headlamp v0.38.0)"
 )
 
 PLATFORM_IMAGES=(

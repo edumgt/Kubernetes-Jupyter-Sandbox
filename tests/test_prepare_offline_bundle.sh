@@ -33,28 +33,17 @@ assert_dir_has_files() {
 
 make_fixture_repo() {
   local target="$1"
+  local script_name
+  local doc_name
 
-  mkdir -p "${target}/scripts" "${target}/scripts/lib" "${target}/apps" "${target}/infra" "${target}/docs"
-  cp "${REPO_ROOT}/scripts/prepare_offline_bundle.sh" "${target}/scripts/prepare_offline_bundle.sh"
-  cp "${REPO_ROOT}/scripts/import_offline_bundle.sh" "${target}/scripts/import_offline_bundle.sh"
+  mkdir -p "${target}/scripts" "${target}/scripts/lib" "${target}/scripts/offline" "${target}/apps" "${target}/infra" "${target}/docs" "${target}/offline/manifests"
+  for script_name in prepare_offline_bundle.sh import_offline_bundle.sh apply_k8s.sh reset_k8s.sh status_k8s.sh healthcheck.sh verify.sh verify_nexus_dependencies.sh apply_offline_suite.sh audit_registry_scope.sh bootstrap_nexus_repos.sh prime_nexus_caches.sh setup_nexus_offline.sh frontend_dev_setup.sh run_frontend_dev.sh run_frontend_build.sh generate_join_command.sh join_worker_node.sh configure_multinode_cluster.sh setup_ingress_metallb.sh setup_kubernetes_dashboard.sh sync_docker_image_to_vms.sh sync_dashboard_images_to_vms.sh fix_kubelet_network_timeouts.sh check_offline_readiness.sh check_vm_airgap_status.sh install_vm_airgap_postboot_timer.sh; do
+    cp "${REPO_ROOT}/scripts/${script_name}" "${target}/scripts/${script_name}"
+  done
   cp "${REPO_ROOT}/scripts/lib/kubernetes_runtime.sh" "${target}/scripts/lib/kubernetes_runtime.sh"
-  cp "${REPO_ROOT}/scripts/apply_k8s.sh" "${target}/scripts/apply_k8s.sh"
-  cp "${REPO_ROOT}/scripts/reset_k8s.sh" "${target}/scripts/reset_k8s.sh"
-  cp "${REPO_ROOT}/scripts/status_k8s.sh" "${target}/scripts/status_k8s.sh"
-  cp "${REPO_ROOT}/scripts/healthcheck.sh" "${target}/scripts/healthcheck.sh"
-  cp "${REPO_ROOT}/scripts/verify.sh" "${target}/scripts/verify.sh"
-  cp "${REPO_ROOT}/scripts/verify_nexus_dependencies.sh" "${target}/scripts/verify_nexus_dependencies.sh"
-  cp "${REPO_ROOT}/scripts/apply_offline_suite.sh" "${target}/scripts/apply_offline_suite.sh"
-  cp "${REPO_ROOT}/scripts/audit_registry_scope.sh" "${target}/scripts/audit_registry_scope.sh"
-  cp "${REPO_ROOT}/scripts/bootstrap_nexus_repos.sh" "${target}/scripts/bootstrap_nexus_repos.sh"
-  cp "${REPO_ROOT}/scripts/prime_nexus_caches.sh" "${target}/scripts/prime_nexus_caches.sh"
-  cp "${REPO_ROOT}/scripts/setup_nexus_offline.sh" "${target}/scripts/setup_nexus_offline.sh"
-  cp "${REPO_ROOT}/scripts/frontend_dev_setup.sh" "${target}/scripts/frontend_dev_setup.sh"
-  cp "${REPO_ROOT}/scripts/run_frontend_dev.sh" "${target}/scripts/run_frontend_dev.sh"
-  cp "${REPO_ROOT}/scripts/run_frontend_build.sh" "${target}/scripts/run_frontend_build.sh"
-  cp "${REPO_ROOT}/scripts/generate_join_command.sh" "${target}/scripts/generate_join_command.sh"
-  cp "${REPO_ROOT}/scripts/join_worker_node.sh" "${target}/scripts/join_worker_node.sh"
-  cp "${REPO_ROOT}/scripts/configure_multinode_cluster.sh" "${target}/scripts/configure_multinode_cluster.sh"
+  cp "${REPO_ROOT}/scripts/lib/image_registry.sh" "${target}/scripts/lib/image_registry.sh"
+  cp "${REPO_ROOT}/scripts/offline/python-dev-seed.txt" "${target}/scripts/offline/python-dev-seed.txt"
+  cp "${REPO_ROOT}/scripts/offline/npm-dev-seed.txt" "${target}/scripts/offline/npm-dev-seed.txt"
   chmod +x "${target}/scripts/"*.sh
 
   mkdir -p "${target}/apps/backend" "${target}/apps/jupyter" "${target}/apps/airflow" "${target}/apps/frontend"
@@ -64,11 +53,10 @@ make_fixture_repo() {
   printf '{\"name\":\"frontend\",\"private\":true}\n' > "${target}/apps/frontend/package.json"
 
   cp -R "${REPO_ROOT}/infra/k8s" "${target}/infra/"
-  cp "${REPO_ROOT}/docs/runbook.md" "${target}/docs/runbook.md"
-  cp "${REPO_ROOT}/docs/sre-checklist.md" "${target}/docs/sre-checklist.md"
-  cp "${REPO_ROOT}/docs/stack-roles.md" "${target}/docs/stack-roles.md"
-  cp "${REPO_ROOT}/docs/gitlab-repo-layout.md" "${target}/docs/gitlab-repo-layout.md"
-  cp "${REPO_ROOT}/docs/offline-repository.md" "${target}/docs/offline-repository.md"
+  cp "${REPO_ROOT}/offline/manifests/"* "${target}/offline/manifests/"
+  for doc_name in runbook.md sre-checklist.md stack-roles.md gitlab-repo-layout.md offline-repository.md; do
+    cp "${REPO_ROOT}/docs/${doc_name}" "${target}/docs/${doc_name}"
+  done
   cp "${REPO_ROOT}/README.md" "${target}/README.md"
 }
 
@@ -116,7 +104,12 @@ mkdir -p "${cache_dir}"
 printf '{\"lockfileVersion\":3}\n' > package-lock.json
 EOF
 
-  chmod +x "${tmp_dir}/bin/python3" "${tmp_dir}/bin/npm"
+  cat > "${tmp_dir}/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+
+  chmod +x "${tmp_dir}/bin/python3" "${tmp_dir}/bin/npm" "${tmp_dir}/bin/docker"
   PATH="${tmp_dir}/bin:${PATH}" bash "${tmp_dir}/scripts/prepare_offline_bundle.sh" \
     --out-dir "${tmp_dir}/dist/offline-bundle" \
     --skip-images

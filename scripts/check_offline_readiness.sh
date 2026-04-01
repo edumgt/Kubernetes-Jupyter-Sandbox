@@ -74,29 +74,29 @@ check_k8s() {
 }
 
 main() {
-  check_file "${MANIFEST_DIR_REPO}/kube-flannel.yml" "repo flannel manifest"
+  check_file "${MANIFEST_DIR_REPO}/calico.yaml" "repo calico manifest"
   check_file "${MANIFEST_DIR_REPO}/ingress-nginx.yaml" "repo ingress manifest"
   check_file "${MANIFEST_DIR_REPO}/metallb-native.yaml" "repo MetalLB manifest"
-  check_file "${MANIFEST_DIR_REPO}/kubernetes-dashboard.yaml" "repo kubernetes-dashboard manifest"
+  check_file "${MANIFEST_DIR_REPO}/headlamp.yaml" "repo headlamp manifest"
 
   if [[ -d "${BUNDLE_DIR}" ]]; then
-    check_file "${MANIFEST_DIR_BUNDLE}/kube-flannel.yml" "bundle flannel manifest"
+    check_file "${MANIFEST_DIR_BUNDLE}/calico.yaml" "bundle calico manifest"
     check_file "${MANIFEST_DIR_BUNDLE}/ingress-nginx.yaml" "bundle ingress manifest"
     check_file "${MANIFEST_DIR_BUNDLE}/metallb-native.yaml" "bundle MetalLB manifest"
-    check_file "${MANIFEST_DIR_BUNDLE}/kubernetes-dashboard.yaml" "bundle kubernetes-dashboard manifest"
+    check_file "${MANIFEST_DIR_BUNDLE}/headlamp.yaml" "bundle headlamp manifest"
   else
     warn "Offline bundle directory not found: ${BUNDLE_DIR}"
   fi
 
   if command -v ctr >/dev/null 2>&1; then
-    check_image_ref "$(platform_support_image platform-flannel v0.28.1)"
-    check_image_ref "$(platform_support_image platform-flannel-cni-plugin v1.9.0-flannel1)"
-    check_image_ref "$(platform_support_image platform-metallb-controller v0.14.8)"
-    check_image_ref "$(platform_support_image platform-metallb-speaker v0.14.8)"
-    check_image_ref "$(platform_support_image platform-ingress-nginx-controller v1.12.2)"
-    check_image_ref "$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.5.3)"
-    check_image_ref "$(platform_support_image platform-kubernetes-dashboard v2.7.0)"
-    check_image_ref "$(platform_support_image platform-kubernetes-dashboard-metrics-scraper v1.0.8)"
+    check_image_ref "$(platform_support_image platform-calico-cni v3.31.2)"
+    check_image_ref "$(platform_support_image platform-calico-node v3.31.2)"
+    check_image_ref "$(platform_support_image platform-calico-kube-controllers v3.31.2)"
+    check_image_ref "$(platform_support_image platform-metallb-controller v0.15.3)"
+    check_image_ref "$(platform_support_image platform-metallb-speaker v0.15.3)"
+    check_image_ref "$(platform_support_image platform-ingress-nginx-controller v1.14.1)"
+    check_image_ref "$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.6.5)"
+    check_image_ref "$(platform_support_image platform-headlamp v0.38.0)"
     check_image_ref "$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
     check_image_ref "$(platform_support_image platform-nexus3 3.90.1-alpine)"
     check_image_ref "$(platform_app_image backend)"
