@@ -59,13 +59,13 @@ resolve_default_manifest_path() {
   local local_name="$1"
   local remote_url="$2"
 
-  if [[ -f "${REMOTE_BUNDLE_MANIFEST_DIR}/${local_name}" ]]; then
-    printf '%s' "${REMOTE_BUNDLE_MANIFEST_DIR}/${local_name}"
+  if [[ -f "${LOCAL_MANIFEST_DIR_DEFAULT}/${local_name}" ]]; then
+    printf '%s' "${LOCAL_MANIFEST_DIR_DEFAULT}/${local_name}"
     return 0
   fi
 
-  if [[ -f "${LOCAL_MANIFEST_DIR_DEFAULT}/${local_name}" ]]; then
-    printf '%s' "${LOCAL_MANIFEST_DIR_DEFAULT}/${local_name}"
+  if [[ -f "${REMOTE_BUNDLE_MANIFEST_DIR}/${local_name}" ]]; then
+    printf '%s' "${REMOTE_BUNDLE_MANIFEST_DIR}/${local_name}"
     return 0
   fi
 
