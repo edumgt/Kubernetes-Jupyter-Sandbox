@@ -109,7 +109,7 @@ main() {
     check_image_ref "$(platform_support_image platform-ingress-nginx-controller v1.14.1)"
     check_image_ref "$(platform_support_image platform-ingress-nginx-kube-webhook-certgen v1.6.5)"
     check_image_ref "$(platform_support_image platform-metrics-server v0.8.1)"
-    check_image_ref "$(platform_support_image platform-headlamp v0.38.0)"
+    check_image_ref "$(platform_support_image platform-headlamp v0.41.0)"
     check_image_ref "$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
     check_image_ref "$(platform_support_image platform-nexus3 3.90.1-alpine)"
     check_image_ref "$(platform_app_image backend)"

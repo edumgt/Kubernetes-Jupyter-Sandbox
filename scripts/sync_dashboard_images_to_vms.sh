@@ -8,8 +8,8 @@ source "${SCRIPT_DIR}/lib/image_registry.sh"
 
 SYNC_SCRIPT="${ROOT_DIR}/scripts/sync_docker_image_to_vms.sh"
 
-SOURCE_UI_IMAGE="${SOURCE_UI_IMAGE:-ghcr.io/headlamp-k8s/headlamp:v0.38.0}"
-TARGET_UI_IMAGE="${TARGET_UI_IMAGE:-$(platform_support_image platform-headlamp v0.38.0)}"
+SOURCE_UI_IMAGE="${SOURCE_UI_IMAGE:-ghcr.io/headlamp-k8s/headlamp:v0.41.0}"
+TARGET_UI_IMAGE="${TARGET_UI_IMAGE:-$(platform_support_image platform-headlamp v0.41.0)}"
 ALLOW_UPSTREAM_PULL=0
 
 SYNC_ARGS=()
@@ -29,7 +29,7 @@ source image locally first (for example via scripts/build_k8s_images.sh), or
 pass --allow-upstream-pull explicitly.
 
 Options:
-  --source-ui-image REF        Source Headlamp image (default: ghcr.io/headlamp-k8s/headlamp:v0.38.0)
+  --source-ui-image REF        Source Headlamp image (default: ghcr.io/headlamp-k8s/headlamp:v0.41.0)
   --target-ui-image REF        Target image tag to preload on VMs.
   --allow-upstream-pull        Pull missing source image from upstream registry.
 
@@ -117,8 +117,8 @@ docker tag "${SOURCE_UI_IMAGE}" "${TARGET_UI_IMAGE}"
 
 bash "${SYNC_SCRIPT}" \
   --image-ref "${TARGET_UI_IMAGE}" \
-  --archive-path /tmp/platform-headlamp-v0.38.0.tar \
-  --remote-archive /tmp/platform-headlamp-v0.38.0.tar \
+  --archive-path /tmp/platform-headlamp-v0.41.0.tar \
+  --remote-archive /tmp/platform-headlamp-v0.41.0.tar \
   "${SYNC_ARGS[@]}"
 
 printf '[%s] Synced cluster UI image:\n' "$(basename "$0")"
