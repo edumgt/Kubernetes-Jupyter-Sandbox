@@ -8,6 +8,7 @@ resources:
   - namespace.yaml
   - local-pv.yaml
   - platform-ingress.yaml
+  - jupyter-dynamic-routing.yaml
 
 labels:
   - pairs:

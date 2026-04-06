@@ -68,6 +68,9 @@
 - `docs/sre-checklist.md`: 운영/SRE 체크리스트
 - `docs/offline-repository.md`: 오프라인 저장소 운영 관점
 - `docs/ova-proof-20260318.md`: OVA 검증 기록
+- `docs/fss-office-server-map.md`: FSS 사무실/반입 IP 맵 + bastion 해석
+- `docs/fss-office-vmware-practice.md`: FSS 연습 설치/검증 절차
+- `docs/bh-bastion-setup.md`: bh bastion 생성/운영 절차
 
 ## 5) 정리 제안 (향후)
 

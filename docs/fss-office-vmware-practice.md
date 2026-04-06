@@ -16,6 +16,16 @@ cd /home/disadm/fss-support/k8s-dev
 # git clone <your-git-url> .
 ```
 
+서버/IP 기준표는 먼저 아래 문서를 확인하세요.
+
+- `docs/fss-office-server-map.md`
+- `scripts/templates/fss-office-inventory.env.example`
+
+참고:
+
+- VMware 화면에 K8s 노드 4대만 보일 수 있습니다. (`master-1`, `worker-1`, `worker-2`, `worker-ml-1`)
+- 사무실 기준 bastion `10.111.111.76`은 별도 VM이며, 반입 대상이 아니므로 기본 4노드 목록에 없을 수 있습니다.
+
 ## 2) K8s 버전 맞추기 (선택)
 
 이 레포 기본은 `v1.34` 계열이며, 아래 env로 minor를 오버라이드할 수 있습니다.

@@ -675,6 +675,199 @@ bash scripts/apply_k8s.sh --env dev
 bash scripts/status_k8s.sh --env dev
 ```
 
+### 4-1. Kubernetes v1.35.3 상세 설치/업그레이드 (4-node VMware 실습 기준)
+
+검증 기준(2026-04-06):
+
+- control-plane: `k8s-data-platform` (`10.110.2.215`)
+- worker: `k8s-worker-1` (`10.110.2.216`)
+- worker: `k8s-worker-2` (`10.110.2.217`)
+- worker: `k8s-worker-3` (`10.110.2.218`)
+- SSH: `disadm@<node> -p 10022`
+
+패키지 고정:
+
+- `kubeadm_1.35.3-1.1_amd64.deb`
+- `kubelet_1.35.3-1.1_amd64.deb`
+- `kubectl_1.35.3-1.1_amd64.deb`
+- 배치 경로: `/opt/k8s-upgrade-1.35.3/`
+
+주의:
+
+- `ens33`를 외부망 기본 경로로 쓰더라도 `ens160`의 `192.168.56.x` 고정 IP를 제거하면 안 됩니다.
+- etcd/Harbor 접근이 `192.168.56.x`에 의존하는 경우가 있어, `ens160`은 보조 경로(metric 높게)로 유지해야 합니다.
+
+#### A) NIC/netplan 정렬 (`ens33` 우선 + `ens160` 유지)
+
+1. 각 노드에 `ens33` DHCP 설정 추가:
+
+```bash
+cat <<'EOF' | sudo tee /etc/netplan/97-ens33-dhcp.yaml >/dev/null
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens33:
+      dhcp4: true
+      dhcp-identifier: mac
+      optional: true
+      dhcp4-overrides:
+        route-metric: 10
+EOF
+sudo chmod 600 /etc/netplan/97-ens33-dhcp.yaml
+```
+
+2. `ens160` 고정 IP를 노드별로 유지(예시: control-plane):
+
+```bash
+cat <<'EOF' | sudo tee /etc/netplan/99-k8s-data-platform-static.yaml >/dev/null
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens160:
+      dhcp4: false
+      addresses:
+        - 192.168.56.10/24
+      routes:
+        - to: default
+          via: 192.168.56.1
+          metric: 500
+      nameservers:
+        addresses: [192.168.56.1, 1.1.1.1, 8.8.8.8]
+EOF
+sudo chmod 600 /etc/netplan/99-k8s-data-platform-static.yaml
+sudo netplan generate && sudo netplan apply
+```
+
+3. 최종 확인:
+
+```bash
+ip -4 -br a | egrep 'ens160|ens32|ens33'
+ip route | egrep 'default|10.110.2.0|192.168.56.0'
+```
+
+#### B) 사전 점검 (control-plane)
+
+```bash
+sudo kubeadm version -o short
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide
+sudo kubeadm upgrade plan v1.35.3
+sudo kubeadm config images pull --kubernetes-version v1.35.3
+```
+
+#### C) control-plane 업그레이드
+
+```bash
+sudo kubeadm upgrade apply -y v1.35.3
+sudo dpkg -i \
+  /opt/k8s-upgrade-1.35.3/kubelet_1.35.3-1.1_amd64.deb \
+  /opt/k8s-upgrade-1.35.3/kubectl_1.35.3-1.1_amd64.deb
+sudo systemctl daemon-reload
+sudo systemctl restart kubelet
+```
+
+#### D) worker 순차 업그레이드 (drain -> upgrade -> uncordon)
+
+control-plane에서 실행:
+
+```bash
+for NODE in k8s-worker-1 k8s-worker-2 k8s-worker-3; do
+  sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl drain "${NODE}" \
+    --ignore-daemonsets --delete-emptydir-data --force --grace-period=30 --timeout=180s
+
+  NODE_IP=""
+  if [ "${NODE}" = "k8s-worker-1" ]; then NODE_IP="10.110.2.216"; fi
+  if [ "${NODE}" = "k8s-worker-2" ]; then NODE_IP="10.110.2.217"; fi
+  if [ "${NODE}" = "k8s-worker-3" ]; then NODE_IP="10.110.2.218"; fi
+
+  ssh -p 10022 disadm@"${NODE_IP}" "
+    sudo kubeadm upgrade node &&
+    sudo dpkg -i /opt/k8s-upgrade-1.35.3/kubelet_1.35.3-1.1_amd64.deb /opt/k8s-upgrade-1.35.3/kubectl_1.35.3-1.1_amd64.deb &&
+    sudo systemctl daemon-reload &&
+    sudo systemctl restart kubelet
+  "
+
+  sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl uncordon "${NODE}"
+done
+```
+
+#### E) 업그레이드 중 `etcd context deadline exceeded` 대응
+
+증상:
+
+- `kubeadm upgrade apply` 중 `failed to create etcd client: ... context deadline exceeded`
+
+주요 원인:
+
+- etcd advertise 주소(`10.110.2.215`)와 etcd server/peer 인증서 SAN 불일치
+- `ens160` 고정 주소 유실로 기존 etcd endpoint(`192.168.56.10`) 단절
+
+점검:
+
+```bash
+sudo sed -n '1,120p' /etc/kubernetes/manifests/etcd.yaml
+sudo openssl x509 -in /etc/kubernetes/pki/etcd/server.crt -noout -text | sed -n '/Subject Alternative Name/,+1p'
+```
+
+보정(필요 시):
+
+```bash
+cat <<'EOF' | sudo tee /tmp/kubeadm-etcd-certfix.yaml >/dev/null
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 10.110.2.215
+  bindPort: 6443
+nodeRegistration:
+  name: k8s-data-platform
+  criSocket: unix:///run/containerd/containerd.sock
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: v1.35.3
+controlPlaneEndpoint: 10.110.2.215:6443
+etcd:
+  local:
+    serverCertSANs:
+      - 10.110.2.215
+      - 192.168.56.10
+      - 127.0.0.1
+    peerCertSANs:
+      - 10.110.2.215
+      - 192.168.56.10
+      - 127.0.0.1
+EOF
+
+sudo rm -f /etc/kubernetes/pki/etcd/server.crt /etc/kubernetes/pki/etcd/server.key
+sudo rm -f /etc/kubernetes/pki/etcd/peer.crt /etc/kubernetes/pki/etcd/peer.key
+sudo kubeadm init phase certs etcd-server --config /tmp/kubeadm-etcd-certfix.yaml
+sudo kubeadm init phase certs etcd-peer --config /tmp/kubeadm-etcd-certfix.yaml
+sudo crictl stop "$(sudo crictl ps --name etcd -q | head -n1)"
+```
+
+이후 `sudo kubeadm upgrade apply -y v1.35.3` 재실행.
+
+#### F) 최종 검증
+
+```bash
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes -o wide
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded
+```
+
+기대값:
+
+- 모든 노드 `Ready`, `VERSION=v1.35.3`
+- 비정상 phase Pod 없음
+
+참고:
+
+- 업그레이드 직후 `calico-kube-controllers`가 `ImagePullBackOff`면 재스케줄로 복구되는 경우가 있습니다.
+
+```bash
+sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n kube-system delete pod -l k8s-app=calico-kube-controllers
+```
+
 ### 5. GitLab Runner overlay
 
 ```bash

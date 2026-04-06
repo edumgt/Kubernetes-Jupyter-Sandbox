@@ -57,6 +57,7 @@ from app.services.demo_users import (
     store_auth_session,
 )
 from app.services.jupyter_sessions import delete_lab_session, ensure_lab_session, get_lab_session
+from app.services.jupyter_sessions import is_dynamic_route_mode
 from app.services.jupyter_snapshots import create_snapshot_publish_job, get_snapshot_status
 from app.services.lab_governance import (
     list_analysis_environments,
@@ -634,14 +635,29 @@ def connect_jupyter_session(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    if not session.get("ready") or not session.get("node_port"):
+    if not session.get("ready"):
         raise HTTPException(status_code=409, detail="JupyterLab session is not ready yet.")
 
-    scheme, host = _lab_public_origin(settings)
-    redirect_url = (
-        f"{scheme}://{host}:{int(session['node_port'])}/lab"
-        f"?token={session['token']}"
-    )
+    if is_dynamic_route_mode(settings):
+        pod_name = str(session.get("pod_name") or "").strip()
+        if not pod_name:
+            raise HTTPException(status_code=500, detail="Session pod name is unavailable.")
+        host_suffix = str(settings.jupyter_dynamic_host_suffix or "").strip().strip(".")
+        if not host_suffix:
+            raise HTTPException(status_code=500, detail="Dynamic route host suffix is not configured.")
+        scheme = str(settings.jupyter_dynamic_scheme or "https").strip().lower() or "https"
+        redirect_url = (
+            f"{scheme}://{pod_name}.{host_suffix}/lab"
+            f"?token={session['token']}"
+        )
+    else:
+        if not session.get("node_port"):
+            raise HTTPException(status_code=409, detail="JupyterLab session is not ready yet.")
+        scheme, host = _lab_public_origin(settings)
+        redirect_url = (
+            f"{scheme}://{host}:{int(session['node_port'])}/lab"
+            f"?token={session['token']}"
+        )
     return LabConnectResponse(
         redirect_url=redirect_url,
         detail="Ownership verified. Redirect to personal JupyterLab.",

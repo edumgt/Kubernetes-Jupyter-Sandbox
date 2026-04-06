@@ -5,6 +5,8 @@
 - VMware에 `bh`라는 bastion VM 1대를 만들고
 - `disadm` 계정으로 SSH/pdsh 기반 운영 연습 환경을 준비
 
+사무실 서버 맵 기준값은 `docs/fss-office-server-map.md`를 참고하세요.
+
 ## 1) 자동 생성 스크립트
 
 추가된 스크립트:
@@ -58,4 +60,3 @@ pdsh -R ssh -w 10.110.2.215,10.110.2.216,10.110.2.217,10.110.2.218 "hostname -I"
 - 바스천이 반입 대상이 아니면, 반입 전에는 운영 가이드 문서로만 유지합니다.
 - 반입 후에는 같은 절차를 NAT 바깥 bastion 없이 내부 Jump host 기준으로 치환하면 됩니다.
 - 노드 추가/삭제는 `docs/fss-office-vmware-practice.md`의 운영 절차를 그대로 사용하세요.
-

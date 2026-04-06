@@ -31,6 +31,11 @@ class LabLaunchProfile:
     extra_env: dict[str, str]
 
 
+def is_dynamic_route_mode(settings: Settings) -> bool:
+    mode = str(settings.jupyter_access_mode or "dynamic-route").strip().lower()
+    return mode in {"dynamic-route", "dynamic_route", "dynamic", "wildcard"}
+
+
 def _resolve_launch_profile(settings: Settings, launch_image: str, profile: dict[str, Any] | None) -> LabLaunchProfile:
     raw_extra = (profile or {}).get("extra_env")
     extra_env: dict[str, str] = {}
@@ -67,14 +72,19 @@ def _read_service(api: client.CoreV1Api, namespace: str, name: str) -> client.V1
         raise
 
 
-def _session_labels(session_id: str) -> dict[str, str]:
-    return {
+def _session_labels(settings: Settings, session_id: str) -> dict[str, str]:
+    labels = {
         "app": SESSION_COMPONENT,
         "app.kubernetes.io/name": SESSION_COMPONENT,
-        "app.kubernetes.io/component": SESSION_COMPONENT,
         "app.kubernetes.io/managed-by": MANAGED_BY,
         SESSION_LABEL_KEY: session_id,
     }
+    if is_dynamic_route_mode(settings):
+        labels["app.kubernetes.io/component"] = "user-jupyter"
+        labels["platform.dev/component"] = SESSION_COMPONENT
+    else:
+        labels["app.kubernetes.io/component"] = SESSION_COMPONENT
+    return labels
 
 
 def _container_detail(pod: client.V1Pod) -> str | None:
@@ -162,6 +172,7 @@ def _session_summary(
     service: client.V1Service | None,
     launch_image: str,
 ) -> dict[str, object]:
+    dynamic_route_mode = is_dynamic_route_mode(settings)
     raw_node_port = None
     if service and service.spec and service.spec.ports:
         raw_node_port = service.spec.ports[0].node_port
@@ -177,6 +188,12 @@ def _session_summary(
     elif phase == "Failed":
         status = "failed"
         detail = _container_detail(pod) or "Pod failed to start."
+    elif ready and dynamic_route_mode:
+        status = "ready"
+        detail = (
+            "JupyterLab is ready on dynamic route "
+            f"{identity.pod_name}.{settings.jupyter_dynamic_host_suffix}."
+        )
     elif ready and raw_node_port:
         status = "ready"
         detail = f"JupyterLab is ready on NodePort {raw_node_port}."
@@ -186,7 +203,7 @@ def _session_summary(
 
     # Keep stale NodePort values out of the API response when the pod is not ready.
     # This prevents clients from opening orphaned links that will fail with connection refused.
-    exposed_node_port = raw_node_port if (ready and raw_node_port) else None
+    exposed_node_port = raw_node_port if (ready and raw_node_port and not dynamic_route_mode) else None
 
     return {
         "session_id": identity.session_id,
@@ -198,7 +215,7 @@ def _session_summary(
         "image": _pod_image(pod) or launch_image,
         "status": status,
         "phase": phase,
-        "ready": ready and bool(raw_node_port),
+        "ready": ready if dynamic_route_mode else (ready and bool(raw_node_port)),
         "detail": detail,
         "token": build_session_token(settings, identity.session_id),
         "node_port": exposed_node_port,
@@ -219,6 +236,7 @@ def _create_pod(
     launch_profile_data: dict[str, Any] | None = None,
 ) -> None:
     launch_profile = _resolve_launch_profile(settings, launch_image, launch_profile_data)
+    dynamic_route_mode = is_dynamic_route_mode(settings)
 
     workspace_mount_args: dict[str, str] = {
         "name": "jupyter-workspace",
@@ -245,7 +263,7 @@ def _create_pod(
     pod = client.V1Pod(
         metadata=client.V1ObjectMeta(
             name=identity.pod_name,
-            labels=_session_labels(identity.session_id),
+            labels=_session_labels(settings, identity.session_id),
             annotations={
                 "platform.dev/username": identity.username,
                 "platform.dev/workspace-subpath": identity.workspace_subpath,
@@ -256,6 +274,8 @@ def _create_pod(
         spec=client.V1PodSpec(
             restart_policy="Always",
             termination_grace_period_seconds=15,
+            hostname=identity.pod_name if dynamic_route_mode else None,
+            subdomain=settings.jupyter_dynamic_subdomain if dynamic_route_mode else None,
             init_containers=[
                 client.V1Container(
                     name="restore-workspace",
@@ -328,10 +348,13 @@ def _create_pod(
 
 
 def _create_service(api: client.CoreV1Api, settings: Settings, identity: LabIdentity) -> None:
+    if is_dynamic_route_mode(settings):
+        return
+
     service = client.V1Service(
         metadata=client.V1ObjectMeta(
             name=identity.service_name,
-            labels=_session_labels(identity.session_id),
+            labels=_session_labels(settings, identity.session_id),
         ),
         spec=client.V1ServiceSpec(
             type="NodePort",
@@ -355,7 +378,9 @@ def get_lab_session(settings: Settings, username: str) -> dict[str, object]:
     try:
         api = get_core_v1_api()
         pod = _read_pod(api, settings.k8s_namespace, identity.pod_name)
-        service = _read_service(api, settings.k8s_namespace, identity.service_name)
+        service = None
+        if not is_dynamic_route_mode(settings):
+            service = _read_service(api, settings.k8s_namespace, identity.service_name)
         launch_image = _pod_image(pod)
         if launch_image is None:
             launch_image, _snapshot = resolve_launch_image_for_identity(settings, identity)
@@ -391,12 +416,16 @@ def ensure_lab_session(
             _create_pod(api, settings, identity, launch_image, launch_profile)
             created_new_session = True
 
-        service = _read_service(api, settings.k8s_namespace, identity.service_name)
+        service = None
+        if not is_dynamic_route_mode(settings):
+            service = _read_service(api, settings.k8s_namespace, identity.service_name)
         if service is None:
             _create_service(api, settings, identity)
 
         pod = _read_pod(api, settings.k8s_namespace, identity.pod_name)
-        service = _read_service(api, settings.k8s_namespace, identity.service_name)
+        service = None
+        if not is_dynamic_route_mode(settings):
+            service = _read_service(api, settings.k8s_namespace, identity.service_name)
         summary = _session_summary(settings, identity, pod, service, launch_image)
         if created_new_session:
             record_lab_launch(settings, identity.username, summary.get("created_at"))
@@ -416,11 +445,12 @@ def delete_lab_session(settings: Settings, username: str) -> dict[str, object]:
         api = get_core_v1_api()
         summary = get_lab_session(settings, identity.username)
 
-        try:
-            api.delete_namespaced_service(name=identity.service_name, namespace=settings.k8s_namespace)
-        except ApiException as exc:
-            if exc.status != 404:
-                raise
+        if not is_dynamic_route_mode(settings):
+            try:
+                api.delete_namespaced_service(name=identity.service_name, namespace=settings.k8s_namespace)
+            except ApiException as exc:
+                if exc.status != 404:
+                    raise
 
         try:
             api.delete_namespaced_pod(name=identity.pod_name, namespace=settings.k8s_namespace)

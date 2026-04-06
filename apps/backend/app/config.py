@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     jupyter_user_pvc_storage_class: str | None = None
     lab_governance_enabled: bool = False
     jupyter_snapshot_builder_image: str = "harbor.local/data-platform/platform-kaniko-executor:v1.23.2-debug"
+    jupyter_access_mode: str = "dynamic-route"
+    jupyter_dynamic_host_suffix: str = "service.jupyter.fss.or.kr"
+    jupyter_dynamic_scheme: str = "https"
+    jupyter_dynamic_subdomain: str = "jupyter-named-pod"
     jupyter_token: str = Field(default="platform123", validation_alias="JUPYTER_TOKEN")
     control_plane_username: str = "admin@test.com"
     control_plane_password: str = "123456"
