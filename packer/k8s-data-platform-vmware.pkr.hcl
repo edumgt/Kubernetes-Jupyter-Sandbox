@@ -82,11 +82,6 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/../ansible"
-    destination = "/tmp/k8s-data-platform-src"
-  }
-
-  provisioner "file" {
     source      = "${path.root}/../apps"
     destination = "/tmp/k8s-data-platform-src"
   }
@@ -109,11 +104,6 @@ build {
   provisioner "file" {
     source      = "${path.root}/http"
     destination = "/tmp/k8s-data-platform-src/packer"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/k8s-data-platform.pkr.hcl"
-    destination = "/tmp/k8s-data-platform-src/packer/k8s-data-platform.pkr.hcl"
   }
 
   provisioner "file" {
@@ -247,7 +237,7 @@ build {
     valid_exit_codes  = [0, 2300218]
     inline = [
       "apt-get update",
-      "DEBIAN_FRONTEND=noninteractive apt-get install -y ansible open-vm-tools || true"
+      "DEBIAN_FRONTEND=noninteractive apt-get install -y open-vm-tools || true"
     ]
   }
 
@@ -257,7 +247,7 @@ build {
       "set -e",
       "systemctl enable open-vm-tools || true",
       "systemctl restart open-vm-tools || true",
-      "ansible-playbook -i 'localhost,' -c local /tmp/k8s-data-platform-src/ansible/playbook-proof.yml",
+      "bash /tmp/k8s-data-platform-src/scripts/bootstrap_local_vm.sh --repo-root /tmp/k8s-data-platform-src",
       "rm -rf /home/${var.ssh_username}/Kubernetes-Jupyter-Sandbox",
       "install -d -m 0755 /home/${var.ssh_username}/Kubernetes-Jupyter-Sandbox",
       "cp -a /tmp/k8s-data-platform-src/. /home/${var.ssh_username}/Kubernetes-Jupyter-Sandbox/",

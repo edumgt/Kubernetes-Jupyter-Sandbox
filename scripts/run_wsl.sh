@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKER_DIR="${ROOT_DIR}/packer"
-PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
+PACKER_TEMPLATE="k8s-data-platform-vmware.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.auto.pkrvars.hcl}"
 DIST_DIR="${DIST_DIR:-C:/ffmpeg}"
 EXPORTER="${EXPORTER:-auto}"
@@ -68,16 +68,9 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/run_wsl.sh [options]
 
-Note:
-  This script uses the VirtualBox-based template (k8s-data-platform.pkr.hcl).
-  For VMware-first workflow, use:
-    - scripts/vmware_build_vm.sh
-    - scripts/vmware_verify_vm.sh
-    - scripts/vmware_export_ova.sh
-
 Options:
   --vars-file PATH      Use a specific Packer vars file.
-  --exporter NAME       One of: auto, vboxmanage, ovftool.
+  --exporter NAME       One of: auto, ovftool.
   --skip-export         Skip the final OVA export step.
   --dry-run             Print the commands without executing them.
   -h, --help            Show this help.

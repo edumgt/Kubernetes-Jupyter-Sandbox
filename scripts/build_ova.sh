@@ -6,7 +6,6 @@ PACKER_VARS="${PACKER_VARS:-${ROOT_DIR}/packer/variables.pkr.hcl}"
 DIST_DIR="${DIST_DIR:-C:/ffmpeg}"
 POWERSHELL_BIN="${POWERSHELL_BIN:-powershell.exe}"
 EXPORTER="${EXPORTER:-auto}"
-DEFAULT_VBOXMANAGE_WINDOWS="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
 DRY_RUN=0
 
 usage() {
@@ -16,7 +15,7 @@ Usage: bash scripts/build_ova.sh [options]
 Options:
   --vars FILE              Override the packer variables file.
   --dist-dir DIR           Override the export output directory.
-  --exporter NAME          One of: auto, vboxmanage, ovftool.
+  --exporter NAME          One of: auto, ovftool.
   --dry-run                Print the export command without running it.
   -h, --help               Show this help message.
 EOF
@@ -177,40 +176,19 @@ invoke_via_powershell() {
     -OutputDir "$(to_tool_arg "${POWERSHELL_BIN}" "${VMX_DIR}")" \
     -DistDir "$(to_tool_arg "${POWERSHELL_BIN}" "${DIST_DIR}")" \
     -Exporter "${EXPORTER}" \
-    -VBoxManage "${VBOXMANAGE_TOOL}" \
     -OvfTool "${OVFTOOL}"
 }
 
 resolve_exporter_tools() {
   local ovftool_candidate
-  local vboxmanage_candidate
-  local packer_vboxmanage
 
-  packer_vboxmanage="$(read_optional_packer_var vboxmanage_path_windows)"
   ovftool_candidate="${OVFTOOL_PATH:-$(read_optional_packer_var ovftool_path_windows)}"
-
-  for vboxmanage_candidate in \
-    "${VBOXMANAGE_PATH:-}" \
-    "${packer_vboxmanage}" \
-    "${DEFAULT_VBOXMANAGE_WINDOWS}" \
-    "VBoxManage.exe" \
-    "VBoxManage"
-  do
-    if VBOXMANAGE_TOOL="$(resolve_windows_tool_path "${vboxmanage_candidate}")"; then
-      break
-    fi
-  done
 
   if [[ -n "${ovftool_candidate}" ]]; then
     OVFTOOL="$(resolve_windows_tool_path "${ovftool_candidate}" || true)"
   else
     OVFTOOL=""
   fi
-}
-
-run_vboxmanage_export() {
-  [[ -n "${VBOXMANAGE_TOOL:-}" ]] || return 1
-  run_cmd "${VBOXMANAGE_TOOL}" export "${VM_NAME}" --output "$(to_tool_arg "${VBOXMANAGE_TOOL}" "${OVA_PATH}")"
 }
 
 run_ovftool_export() {
@@ -252,7 +230,7 @@ done
 
 [[ -f "${PACKER_VARS}" ]] || die "packer variables file not found: ${PACKER_VARS}"
 case "${EXPORTER}" in
-  auto|vboxmanage|ovftool) ;;
+  auto|ovftool) ;;
   *) die "Unsupported exporter: ${EXPORTER}" ;;
 esac
 
@@ -266,24 +244,12 @@ VMX_DIR="$(resolve_output_directory "${OUTPUT_DIR}")"
 
 VMX_PATH="${VMX_DIR}/${VM_NAME}.vmx"
 OVA_PATH="${DIST_DIR}/${VM_NAME}.ova"
-VBOXMANAGE_TOOL=""
 OVFTOOL=""
 resolve_exporter_tools
-
-if [[ "${EXPORTER}" == "vboxmanage" ]]; then
-  run_vboxmanage_export || die "VBoxManage export failed for ${VM_NAME}"
-  echo "OVA exported: ${OVA_PATH}"
-  exit 0
-fi
 
 if [[ "${EXPORTER}" == "ovftool" ]]; then
   run_ovftool_export || die "OVF Tool export failed for ${VM_NAME}"
   echo "OVA exported: ${OVA_PATH}"
-  exit 0
-fi
-
-if run_vboxmanage_export; then
-  echo "OVA exported with VBoxManage: ${OVA_PATH}"
   exit 0
 fi
 

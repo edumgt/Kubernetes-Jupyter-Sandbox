@@ -9,7 +9,7 @@
 | No | 요구사항 | 상태 | 근거 | 비고/후속 |
 |---|---|---|---|---|
 | 1 | K8S 멀티노드 설치/부트스트랩 자동화 | 부분구현 | `scripts/bootstrap_3node_k8s_ova.sh` | 부트스트랩/조인 자동화는 있음. 환경별 운영 완성도는 현장 검증 필요 |
-| 2 | K8S `1.35.3` 설치 기준 | 부분구현 | `README.md`(업그레이드 절차), `ansible/roles/kubernetes/defaults/main.yml` | 가이드는 있으나 기본 프로비저닝 값은 `v1.34` |
+| 2 | K8S `1.35.3` 설치 기준 | 부분구현 | `README.md`(업그레이드 절차), `docs/fss-office-vmware-practice.md` | 가이드는 있으나 기본 프로비저닝 값은 `v1.34` |
 | 3 | Dynamic route (headless service + named pod + wildcard ingress) | 구현됨 | `infra/k8s/fss/base/dynamic-routing.yaml`, `apps/jupyter-pod-router/server.js` | 요구 시나리오와 구조 일치 |
 | 4 | Load Balancer(MetalLB) 설치 | 구현됨 | `scripts/setup_ingress_metallb.sh`, `scripts/setup_k8s_modern_stack.sh` | IP pool/L2Advertisement 자동 적용 |
 | 5 | metrics-server 설치 | 구현됨 | `scripts/setup_ingress_metallb.sh`, `scripts/verify_fss_vmware_setup.sh` | APIService 가용성 점검 포함 |
@@ -34,7 +34,7 @@
 ## 우선 조치 항목
 
 - [ ] P1: `Rook-Ceph over NFS` 또는 대체 스토리지 전략 확정 후 실제 배포 매니페스트 추가
-- [ ] P1: Ansible 기본값을 `1.35.3` 요구와 일치하도록 버전 핀 전략 확정
+- [ ] P1: 기본 부트스트랩 값을 `1.35.3` 요구와 일치하도록 버전 핀 전략 확정
 - [x] P1: ELT 스택 요구서 기준으로 `SQLAlchemy`, `Axios`, `Chartjs` 적용 여부 확정(적용 완료, Nexus seed 목록 반영)
 - [x] P1: Nexus(PyPI/npm) 의존성 캐시 프라이밍/검증 실행 (`prime_nexus_from_env.sh`, `verify_nexus_dependencies.sh`)
 - [x] P2: ELT 배치잡 관리(잡 등록/변경/스케줄/실행 이력) 기능 갭 상세화 및 API/UI 보강

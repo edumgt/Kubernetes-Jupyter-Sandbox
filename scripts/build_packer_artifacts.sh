@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKER_DIR="${ROOT_DIR}/packer"
-PACKER_TEMPLATE="k8s-data-platform.pkr.hcl"
+PACKER_TEMPLATE="k8s-data-platform-vmware.pkr.hcl"
 PACKER_VARS="${PACKER_VARS:-${PACKER_DIR}/variables.auto.pkrvars.hcl}"
 PACKER_BIN="${PACKER_BIN:-packer}"
 OUTPUT_WIN_DIR="${OUTPUT_WIN_DIR:-C:\\ffmpeg}"
@@ -25,7 +25,7 @@ usage() {
 Usage: bash scripts/build_packer_artifacts.sh [options]
 
 Build and export files for these targets:
-  Packer -> VirtualBox -> OVA
+  Packer -> VMware -> OVA
   OVA -> QEMU/KVM -> qcow2
   OVA -> AWS VM Import -> raw disk + import JSON template
 
@@ -34,7 +34,7 @@ Outputs are written to C:\ffmpeg by default and existing files are overwritten.
 Options:
   --vars-file PATH       Packer var file path (default: packer/variables.auto.pkrvars.hcl)
   --output-win-dir PATH  Windows output dir (default: C:\ffmpeg)
-  --exporter NAME        One of: auto, vboxmanage, ovftool (default: auto)
+  --exporter NAME        One of: auto, ovftool (default: auto)
   --skip-packer-build    Skip packer init/validate/build and reuse existing VM output
   -h, --help             Show this help message
 EOF
@@ -206,7 +206,7 @@ require_command sha256sum
 [[ -f "${PACKER_VARS}" ]] || die "Packer vars file not found: ${PACKER_VARS}"
 
 case "${EXPORTER}" in
-  auto|vboxmanage|ovftool) ;;
+  auto|ovftool) ;;
   *) die "Unsupported exporter: ${EXPORTER}" ;;
 esac
 

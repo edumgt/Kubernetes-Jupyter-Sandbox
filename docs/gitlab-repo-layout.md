@@ -6,7 +6,7 @@
 
 - `platform-infra`
   - 현재 작업 중인 이 repo
-  - OVA, Ansible, Kubernetes overlay, GitLab Runner overlay, 운영 문서를 관리
+  - OVA, Kubernetes overlay, GitLab Runner overlay, 운영 문서를 관리
 - `platform-backend`
   - `apps/backend` 코드
   - 이미지 빌드 후 `deployment/backend` 갱신

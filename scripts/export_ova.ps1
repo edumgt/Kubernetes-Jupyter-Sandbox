@@ -2,9 +2,8 @@ Param(
   [string]$VmName = "k8s-data-platform",
   [string]$OutputDir = "C:\ffmpeg",
   [string]$DistDir = "C:\ffmpeg",
-  [ValidateSet("auto", "vboxmanage", "ovftool")]
+  [ValidateSet("auto", "ovftool")]
   [string]$Exporter = "auto",
-  [string]$VBoxManage = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe",
   [string]$OvfTool = "C:\Program Files\VMware\VMware OVF Tool\ovftool.exe"
 )
 
@@ -13,19 +12,6 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 
 $vmx = Join-Path $OutputDir "$VmName.vmx"
 $ova = Join-Path $DistDir "$VmName.ova"
-
-function Invoke-VBoxManageExport {
-  param(
-    [string]$ToolPath
-  )
-
-  if (!(Test-Path $ToolPath)) {
-    return $false
-  }
-
-  & $ToolPath export $VmName --output $ova
-  return $true
-}
 
 function Invoke-OvfToolExport {
   param(
@@ -43,14 +29,6 @@ function Invoke-OvfToolExport {
   return $true
 }
 
-if ($Exporter -eq "vboxmanage") {
-  if (!(Invoke-VBoxManageExport -ToolPath $VBoxManage)) {
-    throw "VBoxManage not found: $VBoxManage"
-  }
-  Write-Host "OVA exported: $ova"
-  exit 0
-}
-
 if ($Exporter -eq "ovftool") {
   if (!(Invoke-OvfToolExport -ToolPath $OvfTool)) {
     throw "OVF Tool not found: $OvfTool"
@@ -59,14 +37,9 @@ if ($Exporter -eq "ovftool") {
   exit 0
 }
 
-if (Invoke-VBoxManageExport -ToolPath $VBoxManage) {
-  Write-Host "OVA exported with VBoxManage: $ova"
-  exit 0
-}
-
 if (Invoke-OvfToolExport -ToolPath $OvfTool) {
   Write-Host "OVA exported with OVF Tool: $ova"
   exit 0
 }
 
-throw "OVA export failed. VBoxManage='$VBoxManage', OvfTool='$OvfTool'"
+throw "OVA export failed. OvfTool='$OvfTool'"

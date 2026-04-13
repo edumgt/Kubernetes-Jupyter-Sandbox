@@ -151,8 +151,8 @@ EOF
   fi
 
   assert_log_contains "${tmp_dir}/packer.log" "init ."
-  assert_log_contains "${tmp_dir}/packer.log" "validate -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"
-  assert_log_contains "${tmp_dir}/packer.log" "build -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform.pkr.hcl"
+  assert_log_contains "${tmp_dir}/packer.log" "validate -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform-vmware.pkr.hcl"
+  assert_log_contains "${tmp_dir}/packer.log" "build -var-file=${tmp_dir}/packer/variables.pkr.hcl k8s-data-platform-vmware.pkr.hcl"
   assert_file_exists "${tmp_dir}/dist/k8s-data-platform.ova"
 )
 

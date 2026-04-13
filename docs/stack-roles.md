@@ -11,8 +11,8 @@
 | 기술 | 이 레포에서 맡는 역할 | 왜 이 솔루션을 썼는가 | 운영 포인트 |
 | --- | --- | --- | --- |
 | Ubuntu 24 | OVA 베이스 OS, Kubernetes 호스트 런타임 | 최신 LTS 기반으로 containerd, kubeadm, Python 3.12 계열과 잘 맞음 | OVA 빌드 시 ISO/OVF Tool/VMware 경로만 맞추면 됨 |
-| Packer | Ubuntu 24 VM 이미지를 반복 가능하게 생성 | VM 구축 과정을 코드화하기 좋음 | [packer/k8s-data-platform.pkr.hcl](../packer/k8s-data-platform.pkr.hcl) 기준 |
-| Ansible | OVA 내부에 kubeadm 기반 Kubernetes, 도구 체인, manifest 파일을 배치 | 이미지 내부 구성을 재현 가능하게 유지 | [ansible/playbook.yml](../ansible/playbook.yml) 참조 |
+| Packer | Ubuntu 24 VM 이미지를 반복 가능하게 생성 | VM 구축 과정을 코드화하기 좋음 | [packer/k8s-data-platform-vmware.pkr.hcl](../packer/k8s-data-platform-vmware.pkr.hcl) 기준 |
+| Shell bootstrap scripts | OVA 내부에 kubeadm 기반 Kubernetes 도구 체인과 repo payload를 배치 | 이미지 내부 구성을 재현 가능하게 유지 | `scripts/bootstrap_local_vm.sh`, `scripts/install_vm_base_packages.sh` 기준 |
 | Kubernetes | 전체 플랫폼의 실제 실행 환경 | 단일 노드로도 pod/service/pvc/NodePort 구조를 실습 가능 | [infra/k8s/base/kustomization.yaml](../infra/k8s/base/kustomization.yaml) + [infra/k8s/overlays/dev/kustomization.yaml](../infra/k8s/overlays/dev/kustomization.yaml) 기준 |
 | Docker/OCI image | 앱 이미지를 패키징하는 형식 | Docker Hub mirror, local Docker build, GitHub Actions 배포 경로를 통일하기 좋음 | 런타임은 Docker Compose 가 아니라 Kubernetes deployment |
 | Kaniko | Docker daemon 없이 이미지를 build/push 하는 CI 빌더 | Kubernetes executor 와 궁합이 좋고 dind 의존도를 줄임 | 개별 app GitLab repo CI 에서 사용 |
@@ -34,7 +34,7 @@
 
 ### 1. 이미지/호스트 레이어
 
-- `Ubuntu 24 + Packer + Ansible` 은 kubeadm 기반 Kubernetes 호스트 자체를 재현하는 레이어입니다.
+- `Ubuntu 24 + Packer + shell bootstrap` 은 kubeadm 기반 Kubernetes 호스트 자체를 재현하는 레이어입니다.
 - 이 레이어를 통해 개발 환경 차이보다 Kubernetes 배포 결과에 집중할 수 있습니다.
 
 ### 2. 애플리케이션 레이어

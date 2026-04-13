@@ -23,7 +23,6 @@ autoinstall:
       name: direct
   packages:
     - open-vm-tools
-    - virtualbox-guest-utils
     - curl
     - ca-certificates
   user-data:
