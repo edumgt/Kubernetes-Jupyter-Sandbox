@@ -1,6 +1,6 @@
 # jupyter-pod-router
 
-`*.jupyter.local` 또는 `*.service.jupyter.fss.or.kr` 같은 와일드카드 host를 받아서, host prefix를 Pod name으로 해석해
+`*.service.jupyter.fss.or.kr` 또는 `*.service.jupyter.fss.or.kr` 같은 와일드카드 host를 받아서, host prefix를 Pod name으로 해석해
 `<pod>.<headless-service>.<namespace>.svc.cluster.local:8888` 으로 프록시하는 라우터입니다.
 
 ## Environment Variables
@@ -29,7 +29,7 @@ npm start
 
 ## Local Dev Hosts Sync
 
-개발 환경에서 `jupyter.local` suffix를 쓰려면 로컬 hosts 파일에 동적으로 pod host를 넣어야 합니다.
+개발 환경에서 `service.jupyter.fss.or.kr` suffix를 쓰려면 로컬 hosts 파일에 동적으로 pod host를 넣어야 합니다.
 
 ```bash
 bash scripts/sync_jupyter_dynamic_hosts.sh --apply-wsl-hosts --apply-windows-hosts

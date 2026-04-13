@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
         - name: router
-          image: harbor.local/library/jupyter-pod-router:latest
+          image: 10.111.111.72/library/jupyter-pod-router:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

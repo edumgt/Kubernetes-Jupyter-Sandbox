@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: harbor.local/library/redis:8.6.1
+          image: 10.111.111.72/library/redis:8.6.1
           imagePullPolicy: IfNotPresent
           command:
             - redis-server

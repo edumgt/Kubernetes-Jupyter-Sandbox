@@ -3,9 +3,9 @@
 이 디렉터리는 아래 요구사항을 반영한 K8s 매니페스트 초안입니다.
 
 - namespace 분리: `app`, `dis`, `infra`, `sample`, `unitest`
-- ADW 앱:
-  - `app/fss-adw-server` (Node 22, Express 5, Socket.io, Mongoose, Redis session)
-  - `app/fss-adw-frontend` (Vue3 + Quasar SPA)
+- DIS 앱:
+  - `app/fss-dis-server` (Node 22, Express 5, Socket.io, Mongoose, Redis session)
+  - `app/fss-dis-frontend` (Vue3 + Quasar SPA)
 - 사용자 Jupyter 동적 라우팅:
   - headless service
   - wildcard ingress
@@ -22,24 +22,6 @@ kubectl apply -k infra/k8s/fss/overlays/dev
 
 # prod
 kubectl apply -k infra/k8s/fss/overlays/prod
-```
-
-또는 자동 설치 스크립트 사용:
-
-```bash
-bash scripts/setup_fss_platform.sh \
-  --env dev \
-  --metallb-range 10.111.111.77-10.111.111.77 \
-  --ingress-lb-ip 10.111.111.77 \
-  --harbor-server 10.111.111.72:80 \
-  --harbor-username 'robot$dis' \
-  --harbor-password '<password>'
-```
-
-검증 스크립트:
-
-```bash
-bash scripts/verify_fss_vmware_setup.sh
 ```
 
 `overlays/dev`는 `infra` namespace의 Mongo/Redis PVC 바인딩을 위해 로컬 PV(`local-pv.yaml`)를 포함합니다.
@@ -73,17 +55,17 @@ bash scripts/verify_fss_vmware_setup.sh
 
 Python 기반 Jupyter 관리 로직을 Node 기반으로 전환하기 위해 아래 리소스를 추가했습니다.
 
-- `infra/k8s/fss/base/adw-app.yaml`
-  - `fss-adw-server` Deployment/Service/Ingress
-  - `fss-adw-frontend` Deployment/Service
-  - `fss-adw-server` ServiceAccount + ClusterRole + ClusterRoleBinding
+- `infra/k8s/fss/base/dis-app.yaml`
+  - `fss-dis-server` Deployment/Service/Ingress
+  - `fss-dis-frontend` Deployment/Service
+  - `fss-dis-server` ServiceAccount + ClusterRole + ClusterRoleBinding
   - 앱 ConfigMap/Secret
 
 백엔드 소스:
-- `apps/adw-server-node`
+- `apps/fss-dis-server-node`
 
 프론트엔드 소스:
-- `apps/jupyter-frontend`
+- `apps/fss-dis-frontend`
 
 ## Important Production Notes
 
@@ -98,15 +80,15 @@ Python 기반 Jupyter 관리 로직을 Node 기반으로 전환하기 위해 아
 
 요구사항에 맞춰 프로젝트를 다음처럼 가정합니다.
 
-- `app`: fss-adw-server, fss-adw-batch 등
+- `app`: fss-dis-server, fss-dis-batch 등
 - `dis`: 사용자 Jupyter 이미지
 - `library`: 공통 인프라 이미지
 
 현재 fss base는 아래 이미지를 사용합니다.
 
-- `harbor.local/library/mongo:8.2.5`
-- `harbor.local/library/redis:8.6.1`
-- `harbor.local/library/jupyter-pod-router:latest`
+- `10.111.111.72/library/mongo:8.2.5`
+- `10.111.111.72/library/redis:8.6.1`
+- `10.111.111.72/library/jupyter-pod-router:latest`
 
 ## Storage Recommendation
 

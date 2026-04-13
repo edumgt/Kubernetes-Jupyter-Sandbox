@@ -21,7 +21,7 @@ spec:
               values:
                 - k8s-worker-2
   hostPath:
-    path: /var/lib/k8s-data-platform/pv/fss-mongo-data
+    path: /var/lib/fss-dis-platform/pv/fss-mongo-data
     type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -47,5 +47,5 @@ spec:
               values:
                 - k8s-worker-2
   hostPath:
-    path: /var/lib/k8s-data-platform/pv/fss-redis-data
+    path: /var/lib/fss-dis-platform/pv/fss-redis-data
     type: DirectoryOrCreate
