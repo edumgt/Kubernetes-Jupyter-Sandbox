@@ -1415,10 +1415,10 @@ sudo ctr -n k8s.io images import backend.tar
 sudo ctr -n k8s.io images import frontend.tar
 
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n data-platform-dev \
-  set image deploy/backend backend=docker.io/edumgt/k8s-data-platform-backend:2026.03.19-1
+  set image deploy/backend backend=harbor.local/data-platform/k8s-data-platform-backend:2026.03.19-1
 
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n data-platform-dev \
-  set image deploy/frontend frontend=docker.io/edumgt/k8s-data-platform-frontend:2026.03.19-1
+  set image deploy/frontend frontend=harbor.local/data-platform/k8s-data-platform-frontend:2026.03.19-1
 ```
 
 ## 오프라인 사용 전략

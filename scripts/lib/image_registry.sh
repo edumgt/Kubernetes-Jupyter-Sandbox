@@ -96,6 +96,9 @@ images:
   - name: harbor.local/data-platform/platform-redis
     newName: $(image_registry_prefix)/platform-redis
     newTag: "7-alpine"
+  - name: harbor.local/data-platform/platform-postgres
+    newName: $(image_registry_prefix)/platform-postgres
+    newTag: "16-alpine"
   - name: harbor.local/data-platform/platform-gitlab-ce
     newName: $(image_registry_prefix)/platform-gitlab-ce
     newTag: "17.10.0-ce.0"

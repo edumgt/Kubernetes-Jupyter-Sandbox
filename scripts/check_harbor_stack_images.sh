@@ -158,6 +158,7 @@ REQUIRED_IMAGES=(
   "$(platform_support_image platform-airflow-base 2.10.5-python3.12)"
   "$(platform_support_image platform-mongodb 7.0)"
   "$(platform_support_image platform-redis 7-alpine)"
+  "$(platform_support_image platform-postgres 16-alpine)"
   "$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
   "$(platform_support_image platform-gitlab-runner alpine-v17.10.0)"
   "$(platform_support_image platform-gitlab-runner-helper x86_64-v17.10.0)"

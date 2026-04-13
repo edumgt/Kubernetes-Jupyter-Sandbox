@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: harbor.local/data-platform/platform-postgres:16-alpine
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5432

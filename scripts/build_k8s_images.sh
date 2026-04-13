@@ -165,6 +165,7 @@ SUPPORT_IMAGES=(
   "apache/airflow:2.10.5-python3.12|$(platform_support_image platform-airflow-base 2.10.5-python3.12)"
   "mongo:7.0|$(platform_support_image platform-mongodb 7.0)"
   "redis:7-alpine|$(platform_support_image platform-redis 7-alpine)"
+  "postgres:16-alpine|$(platform_support_image platform-postgres 16-alpine)"
   "gitlab/gitlab-ce:17.10.0-ce.0|$(platform_support_image platform-gitlab-ce 17.10.0-ce.0)"
   "gitlab/gitlab-runner:alpine-v17.10.0|$(platform_support_image platform-gitlab-runner alpine-v17.10.0)"
   "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v17.10.0|$(platform_support_image platform-gitlab-runner-helper x86_64-v17.10.0)"
