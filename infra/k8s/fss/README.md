@@ -26,6 +26,26 @@ kubectl apply -k infra/k8s/fss/overlays/prod
 
 `overlays/dev`는 `infra` namespace의 Mongo/Redis PVC 바인딩을 위해 로컬 PV(`local-pv.yaml`)를 포함합니다.
 
+## MetalLB Access (권장)
+
+`overlays/dev`에는 아래가 포함되어 있습니다.
+
+- `metallb-system/fss-vpn-pool` IPAddressPool (`10.111.111.77`)
+- `ingress-nginx/ingress-nginx-controller` LoadBalancer 고정 IP (`10.111.111.77`)
+
+적용 후 확인:
+
+```bash
+kubectl -n metallb-system get ipaddresspool,l2advertisement
+kubectl -n ingress-nginx get svc ingress-nginx-controller -o wide
+kubectl -n app get ingress fss-dis
+```
+
+VPN 브라우저 접속:
+
+- `http://10.111.111.77` (도메인 없이 즉시 접근)
+- 도메인 준비 후 `dis.fss.or.kr -> 10.111.111.77` DNS 연결
+
 ## Dynamic Route Design
 
 고정 ingress/service 하나로 다음 형식을 처리합니다.

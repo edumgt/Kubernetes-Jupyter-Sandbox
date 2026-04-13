@@ -16,3 +16,7 @@ echo "[start.sh] Applying FSS manifests overlay: ${OVERLAY}"
 kubectl apply -k "${ROOT_DIR}/infra/k8s/fss/overlays/${OVERLAY}"
 
 echo "[start.sh] Done."
+if [[ "${OVERLAY}" == "dev" ]]; then
+  echo "[start.sh] MetalLB / ingress access check:"
+  echo "  kubectl -n ingress-nginx get svc ingress-nginx-controller -o wide"
+fi

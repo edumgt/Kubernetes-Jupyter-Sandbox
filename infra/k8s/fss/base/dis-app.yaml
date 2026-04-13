@@ -19,7 +19,7 @@ data:
   JUPYTER_BOOTSTRAP_DIR: /opt/platform/bootstrap-workspace
   AUTH_TOKEN_TTL_SECONDS: "28800"
   AUTH_SESSION_PREFIX: "fss:auth:session:"
-  CORS_ORIGINS: "https://dis.fss.or.kr,http://dis.fss.or.kr"
+  CORS_ORIGINS: ""
   FRONTEND_URL: "https://dis.fss.or.kr"
 ---
 apiVersion: v1
@@ -199,6 +199,43 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: fss-dis-server
+                port:
+                  number: 3000
+          - path: /healthz
+            pathType: Prefix
+            backend:
+              service:
+                name: fss-dis-server
+                port:
+                  number: 3000
+          - path: /livez
+            pathType: Prefix
+            backend:
+              service:
+                name: fss-dis-server
+                port:
+                  number: 3000
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: fss-dis-server
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fss-dis-frontend
+                port:
+                  number: 80
     - host: dis.fss.or.kr
       http:
         paths:
