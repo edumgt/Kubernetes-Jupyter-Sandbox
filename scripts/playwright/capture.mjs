@@ -22,9 +22,9 @@ const frontendGitFlowFile =
 const test1LabUrl = process.env.TEST1_LAB_URL ?? "";
 const browserExecutablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? "";
 const nexusUsername = process.env.NEXUS_USERNAME ?? "admin";
-const nexusPassword = process.env.NEXUS_PASSWORD ?? "nexus123!";
+const nexusPassword = process.env.NEXUS_PASSWORD ?? "CHANGE_ME";
 const airflowUsername = process.env.AIRFLOW_USERNAME ?? "admin";
-const airflowPassword = process.env.AIRFLOW_PASSWORD ?? "admin12345!";
+const airflowPassword = process.env.AIRFLOW_PASSWORD ?? "CHANGE_ME";
 const test1Username = process.env.TEST1_USERNAME ?? "test1@test.com";
 const test1Password = process.env.TEST1_PASSWORD ?? "123456";
 const adminUsername = process.env.ADMIN_USERNAME ?? process.env.CONTROL_PLANE_USERNAME ?? "admin@test.com";
@@ -158,7 +158,7 @@ async function captureJupyter(browser) {
   await waitForHttp(loginUrl, { timeoutMs: 240000 });
   const page = await createPage(browser, 1024);
   await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 240000 });
-  await page.getByLabel("Password or token").fill("platform123");
+  await page.getByLabel("Password or token").fill("CHANGE_ME");
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await page.waitForURL(/lab/, { timeout: 240000 });
   await page.waitForLoadState("networkidle", { timeout: 240000 }).catch(() => {});
