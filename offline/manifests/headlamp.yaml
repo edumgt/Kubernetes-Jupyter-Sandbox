@@ -53,7 +53,7 @@ spec:
       serviceAccountName: headlamp-admin
       containers:
         - name: headlamp
-          image: 10.111.111.72/library/platform-headlamp:v0.41.0
+          image: harbor.local/data-platform/platform-headlamp:v0.41.0
           imagePullPolicy: IfNotPresent
           args:
             - -in-cluster
