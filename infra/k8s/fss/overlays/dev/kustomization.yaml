@@ -4,8 +4,6 @@ kind: Kustomization
 resources:
   - ../../base
   - local-pv.yaml
-  - metallb-ip-pool.yaml
-  - ingress-nginx-lb.yaml
 
 labels:
   - pairs:
