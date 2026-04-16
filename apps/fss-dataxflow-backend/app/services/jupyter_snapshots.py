@@ -199,7 +199,7 @@ EOF
                         init_containers=[
                             client.V1Container(
                                 name="prepare-context",
-                                image="192.168.56.72/library/platform-busybox:1.36",
+                                image=settings.jupyter_snapshot_context_image,
                                 command=["/bin/sh", "-c", prepare_script],
                                 volume_mounts=[
                                     client.V1VolumeMount(name="context", mount_path="/context"),
