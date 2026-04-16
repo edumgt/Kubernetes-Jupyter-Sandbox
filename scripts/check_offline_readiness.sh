@@ -6,7 +6,9 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/lib/image_registry.sh
 source "${SCRIPT_DIR}/lib/image_registry.sh"
 BUNDLE_DIR="${BUNDLE_DIR:-/opt/k8s-data-platform/offline-bundle}"
-MANIFEST_DIR_REPO="${ROOT_DIR}/offline/manifests"
+MANIFEST_DIR_REPO_PLATFORM="${ROOT_DIR}/manifests/platform"
+MANIFEST_DIR_REPO_APPS="${ROOT_DIR}/manifests/apps"
+MANIFEST_DIR_REPO_LEGACY="${ROOT_DIR}/offline/manifests"
 MANIFEST_DIR_BUNDLE="${BUNDLE_DIR}/k8s/manifests"
 EXIT_CODE=0
 
@@ -84,11 +86,23 @@ check_k8s() {
 }
 
 main() {
-  check_file "${MANIFEST_DIR_REPO}/calico.yaml" "repo calico manifest"
-  check_file "${MANIFEST_DIR_REPO}/ingress-nginx.yaml" "repo ingress manifest"
-  check_file "${MANIFEST_DIR_REPO}/metallb-native.yaml" "repo MetalLB manifest"
-  check_file "${MANIFEST_DIR_REPO}/metrics-server.yaml" "repo metrics-server manifest"
-  check_file "${MANIFEST_DIR_REPO}/headlamp.yaml" "repo headlamp manifest"
+  if [[ -d "${MANIFEST_DIR_REPO_PLATFORM}" ]]; then
+    check_file "${MANIFEST_DIR_REPO_PLATFORM}/calico.yaml" "repo calico manifest"
+    check_file "${MANIFEST_DIR_REPO_PLATFORM}/ingress-nginx.yaml" "repo ingress manifest"
+    check_file "${MANIFEST_DIR_REPO_PLATFORM}/metallb-native.yaml" "repo MetalLB manifest"
+    check_file "${MANIFEST_DIR_REPO_PLATFORM}/metrics-server.yaml" "repo metrics-server manifest"
+  else
+    check_file "${MANIFEST_DIR_REPO_LEGACY}/calico.yaml" "legacy repo calico manifest"
+    check_file "${MANIFEST_DIR_REPO_LEGACY}/ingress-nginx.yaml" "legacy repo ingress manifest"
+    check_file "${MANIFEST_DIR_REPO_LEGACY}/metallb-native.yaml" "legacy repo MetalLB manifest"
+    check_file "${MANIFEST_DIR_REPO_LEGACY}/metrics-server.yaml" "legacy repo metrics-server manifest"
+  fi
+
+  if [[ -f "${MANIFEST_DIR_REPO_APPS}/headlamp-offline.yaml" ]]; then
+    check_file "${MANIFEST_DIR_REPO_APPS}/headlamp-offline.yaml" "repo headlamp manifest"
+  else
+    check_file "${MANIFEST_DIR_REPO_LEGACY}/headlamp.yaml" "legacy repo headlamp manifest"
+  fi
 
   if [[ -d "${BUNDLE_DIR}" ]]; then
     check_file "${MANIFEST_DIR_BUNDLE}/calico.yaml" "bundle calico manifest"

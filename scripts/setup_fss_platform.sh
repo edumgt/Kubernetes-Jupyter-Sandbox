@@ -28,7 +28,7 @@ Applies FSS requirements:
   - namespace set: app/dis/infra/sample/unitest
   - optional modern addons: ingress-nginx + MetalLB + metrics-server + Headlamp
   - optional Harbor pull secret bootstrap for app/dis/infra
-  - FSS overlay apply (infra/k8s/fss/overlays/<env>)
+  - FSS overlay apply (manifests/fss/overlays/<env>)
 
 Options:
   --env dev|prod             Overlay environment (default: dev)
@@ -191,8 +191,14 @@ else
   log "Skipping modern stack setup (--skip-modern-stack)"
 fi
 
-log "Applying FSS overlay: infra/k8s/fss/overlays/${ENVIRONMENT}"
-run_kubectl apply -k "${ROOT_DIR}/infra/k8s/fss/overlays/${ENVIRONMENT}"
+FSS_OVERLAY_PATH="${ROOT_DIR}/manifests/fss/overlays/${ENVIRONMENT}"
+if [[ ! -d "${FSS_OVERLAY_PATH}" ]]; then
+  FSS_OVERLAY_PATH="${ROOT_DIR}/infra/k8s/fss/overlays/${ENVIRONMENT}"
+fi
+[[ -d "${FSS_OVERLAY_PATH}" ]] || die "FSS overlay path not found for env=${ENVIRONMENT}"
+
+log "Applying FSS overlay: ${FSS_OVERLAY_PATH}"
+run_kubectl apply -k "${FSS_OVERLAY_PATH}"
 
 if [[ "${SKIP_HARBOR_SECRET}" -eq 0 ]]; then
   [[ -n "${HARBOR_SERVER}" ]] || die "--harbor-server is required unless --skip-harbor-secret"
@@ -218,4 +224,3 @@ log "Metrics APIService status"
 run_kubectl get apiservice v1beta1.metrics.k8s.io -o wide
 
 log "FSS platform setup completed."
-

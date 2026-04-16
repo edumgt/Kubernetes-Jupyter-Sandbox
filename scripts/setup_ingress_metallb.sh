@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/image_registry.sh
 source "${SCRIPT_DIR}/lib/image_registry.sh"
 LOCAL_MANIFEST_DIR_DEFAULT="${SCRIPT_DIR%/scripts}/offline/manifests"
+MANIFEST_DIR_PLATFORM="${SCRIPT_DIR%/scripts}/manifests/platform"
 REMOTE_BUNDLE_MANIFEST_DIR="/opt/k8s-data-platform/offline-bundle/k8s/manifests"
 
 METALLB_MANIFEST="${METALLB_MANIFEST:-}"
@@ -65,6 +66,11 @@ die() {
 resolve_default_manifest_path() {
   local local_name="$1"
   local remote_url="$2"
+
+  if [[ -f "${MANIFEST_DIR_PLATFORM}/${local_name}" ]]; then
+    printf '%s' "${MANIFEST_DIR_PLATFORM}/${local_name}"
+    return 0
+  fi
 
   if [[ -f "${LOCAL_MANIFEST_DIR_DEFAULT}/${local_name}" ]]; then
     printf '%s' "${LOCAL_MANIFEST_DIR_DEFAULT}/${local_name}"

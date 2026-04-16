@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOCAL_MANIFEST_DIR_DEFAULT="${ROOT_DIR}/offline/manifests"
+MANIFEST_DIR_APPS="${ROOT_DIR}/manifests/apps"
 REMOTE_BUNDLE_MANIFEST_DIR="/opt/k8s-data-platform/offline-bundle/k8s/manifests"
 
 HEADLAMP_NAMESPACE="headlamp"
@@ -28,8 +29,9 @@ manages Headlamp instead of Kubernetes Dashboard.
 Options:
   --manifest PATH             Headlamp manifest path.
                               Defaults:
-                                1) /opt/k8s-data-platform/offline-bundle/k8s/manifests/headlamp.yaml
-                                2) ./offline/manifests/headlamp.yaml
+                                1) ./manifests/apps/headlamp-offline.yaml
+                                2) /opt/k8s-data-platform/offline-bundle/k8s/manifests/headlamp.yaml
+                                3) ./offline/manifests/headlamp.yaml
   --ingress-host HOST         Headlamp ingress host (default: headlamp.platform.local)
   --ingress-name NAME         Ingress resource name (default: headlamp-ingress)
   --ingress-class NAME        IngressClass name (default: nginx)
@@ -70,6 +72,16 @@ run_kubectl() {
 resolve_manifest_path() {
   if [[ -n "${HEADLAMP_MANIFEST}" ]]; then
     printf '%s' "${HEADLAMP_MANIFEST}"
+    return 0
+  fi
+
+  if [[ -f "${MANIFEST_DIR_APPS}/headlamp-offline.yaml" ]]; then
+    printf '%s' "${MANIFEST_DIR_APPS}/headlamp-offline.yaml"
+    return 0
+  fi
+
+  if [[ -f "${MANIFEST_DIR_APPS}/headlamp-app.yaml" ]]; then
+    printf '%s' "${MANIFEST_DIR_APPS}/headlamp-app.yaml"
     return 0
   fi
 
