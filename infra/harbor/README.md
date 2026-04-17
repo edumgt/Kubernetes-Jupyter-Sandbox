@@ -1,27 +1,15 @@
-# Harbor Snapshot Notes
+# Internal Registry Notes
 
-이 저장소에서 Harbor 는 `per-user Jupyter snapshot image` 저장소에 더해, 폐쇄망 기준 플랫폼 공통 이미지와 Kubernetes 부가 이미지를 함께 저장하는 기본 내부 레지스트리 역할을 맡습니다.
+이 디렉터리는 폐쇄망 환경에서 사용하는 내부 레지스트리 운영 메모를 담습니다.
 
-## 용도
+## 목적
 
-- 사용자 workspace 를 Kaniko Job 으로 이미지화
-- 이미지 경로: `harbor.local/data-platform/jupyter-user-<session-id>:latest`
-- 다음 로그인 시 backend 가 최신 restorable snapshot image 를 우선 선택
-- 플랫폼 기본 app/runtime 이미지를 `harbor.local/data-platform/*` 에서 pull
+- 오프라인 반입 이미지 보관
+- 노드 런타임(containerd/docker)로 이미지 공급
+- 설치 후 재배포 시 동일 이미지 재사용
 
-## 필요한 설정
+## 운영 권장사항
 
-- ConfigMap
-  - `PLATFORM_HARBOR_URL`
-  - `PLATFORM_HARBOR_REGISTRY`
-  - `PLATFORM_HARBOR_PROJECT`
-  - `PLATFORM_HARBOR_INSECURE_REGISTRY`
-- Secret
-  - `PLATFORM_HARBOR_USER`
-  - `PLATFORM_HARBOR_PASSWORD`
-
-## 운영 메모
-
-- snapshot publish 는 backend 가 Kubernetes Job 을 생성해서 수행합니다.
-- restore pull 이 필요하므로 Harbor project 는 public 으로 두거나 별도 imagePullSecret 전략을 준비하세요.
-- air-gap 운영 기준 기본 이미지는 `harbor.local/data-platform/*` 로 preload/pull 하도록 맞춥니다.
+- 번들 반입 전후로 해시(SHA256) 검증
+- 레지스트리 접근 계정/비밀번호를 Vault 등으로 분리 관리
+- 이미지 태그 정책(`version/date`)을 문서화

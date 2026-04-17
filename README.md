@@ -1,86 +1,110 @@
-# k8s-fss-ova-airgap
+# k8s-jupyter VM/OVA Air-gap Toolkit
 
-이 저장소는 `/home/ubuntu/k8s-fss` 환경구성을 기준으로, **OVA 중심 VM air-gap 운영**을 위한 표준 구조로 개편된 레포입니다.
+이 저장소는 **VM 설치, OVA 생성/내보내기, air-gap 반입/운영** 자동화에 집중한 운영 레포입니다.
 
-## 현재 표준 구조
+## 핵심 디렉터리
 
 ```text
 .
-├── applications/   # 앱 소스(backend/frontend/router/jupyter/airflow)
-├── manifests/      # Kubernetes 매니페스트(fss/platform/apps/addons)
-├── infra/          # VM IP 인벤토리(192.168.56.x)
-├── scripts/        # OVA/air-gap 설치·검증 자동화
-├── packer/         # OVA 빌드 정의
-└── offline/        # 레거시 오프라인 번들 경로(호환 유지)
+├── packer/         # VM/OVA 이미지 빌드 정의
+├── scripts/        # VM 네트워크/설치/반입/검증 자동화
+├── manifests/      # 클러스터 기본 인프라 매니페스트
+├── offline/        # 오프라인 반입용 기본 매니페스트
+├── docs/           # 단계별 운영 문서
+└── infra/          # VM IP 인벤토리 문서
 ```
 
-## VMware 기준 대상 토폴로지
-
-- Control Plane: `192.168.56.10`
-- Worker: `192.168.56.11~13`
-- NFS/Storage: `192.168.56.20`
-- General VM: `192.168.56.31~35`
-- MetalLB VIP: `192.168.56.240`
-
-상세 VM 인벤토리: `infra/README.md`, `infra/192.168.56.*/server종류.md`
-
-## Air-gap 운영 표준 순서
-
-1. OVA 준비/반입
-- `docs/phase-1-build-ova.md`
-
-2. OVA 내부 솔루션 운영
-- `docs/phase-2-ova-solution-ops.md`
-
-3. 완성 OVA 배포 후 폐쇄망 설치
-- `docs/phase-3-install-airgap-from-ova.md`
-
-## Kubernetes 배포
-
-플랫폼 애드온 + FSS 오버레이 적용:
+## 빠른 시작
 
 ```bash
-bash scripts/setup_fss_platform.sh \
-  --env dev \
-  --metallb-range 192.168.56.240-192.168.56.240 \
-  --ingress-lb-ip 192.168.56.240 \
-  --skip-harbor-secret
+bash scripts/phase1_build_ova_assets.sh all
+bash scripts/phase2_operate_airgap_cluster.sh all
+bash scripts/phase3_install_from_completed_ova.sh full
+bash scripts/status_k8s.sh
+bash scripts/check_vm_airgap_status.sh
 ```
 
-직접 적용 시:
+## 설치 절차 (OVA 기준)
+
+1. 준비물
+- OVA 파일(노드 수에 맞는 이미지)
+- 오프라인 번들 디렉터리(`images/*.tar`, `manifests/`)
+- 이 저장소의 `scripts/` 디렉터리
+
+2. VM 기본 설정
 
 ```bash
-kubectl apply -f manifests/platform/calico.yaml
-kubectl apply -f manifests/platform/ingress-nginx.yaml
-kubectl apply -f manifests/platform/metallb-native.yaml
-kubectl apply -f manifests/platform/metrics-server.yaml
-kubectl apply -k manifests/fss/overlays/dev
+sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
+sudo bash scripts/set_hostname_hosts.sh --hostname <HOSTNAME> --entry "<IP> <HOSTNAME>"
 ```
 
-## 주요 접속
-
-- Ingress VIP: `http://192.168.56.240/`
-- Headlamp: `http://192.168.56.240/headlamp-dashboard/?lng=en`
-
-## 오프라인 준비 검증
+3. 오프라인 번들 반입
 
 ```bash
-bash scripts/check_offline_readiness.sh
+bash scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle --apply
 ```
 
-검증 항목:
-- repo/bundle 매니페스트 존재
-- containerd preload 이미지 존재
-- `ImagePullBackOff`, `ErrImagePull` 잔존 여부
+4. 설치 후 점검
 
-## 호환 정책
+```bash
+bash scripts/status_k8s.sh
+bash scripts/check_vm_airgap_status.sh
+```
 
-기존 자동화/문서 호환을 위해 아래 경로는 당분간 유지합니다.
+5. OVA 재생성(필요 시)
 
-- `apps/`
-- `infra/k8s/`
-- `offline/manifests/`
+```bash
+bash ovabuild.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl --dist-dir C:/ffmpeg
+```
 
-새 표준은 `applications/`, `manifests/`, `infra/<IP>/` 입니다.
+## 장애 대응
 
-경로 매핑 상세: `docs/migration-fss-ova-airgap.md`
+1. Kubernetes 기본 상태
+
+```bash
+bash scripts/status_k8s.sh
+kubectl get nodes -o wide
+kubectl get pods -A
+```
+
+2. containerd/kubelet 비정상
+
+```bash
+sudo systemctl status containerd --no-pager
+sudo systemctl status kubelet --no-pager
+sudo systemctl restart containerd kubelet
+```
+
+3. 오프라인 이미지 반입 실패
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle --runtime-only
+```
+
+4. VM 네트워크 문제
+
+```bash
+ip a
+ip route
+cat /etc/hosts
+sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
+sudo bash scripts/set_hostname_hosts.sh --hostname <HOSTNAME> --entry "<IP> <HOSTNAME>"
+```
+
+## 문서 맵
+
+권장 읽기 순서:
+1. `README.md`
+2. `docs/phase-1-build-ova.md`
+3. `docs/phase-2-ova-solution-ops.md`
+4. `docs/phase-3-install-airgap-from-ova.md`
+5. `CHECKLIST.md`
+6. `PORTS.md`
+7. `CHANGELOG.md`
+
+주요 스크립트:
+- `scripts/phase1_build_ova_assets.sh`
+- `scripts/phase2_operate_airgap_cluster.sh`
+- `scripts/phase3_install_from_completed_ova.sh`
+- `scripts/import_offline_bundle.sh`
+- `ovabuild.sh`

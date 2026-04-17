@@ -1,13 +1,13 @@
-# k8s-fss-ova-airgap
+# k8s-jupyter VM/OVA Air-gap Toolkit
 
-本仓库已按 `/home/ubuntu/k8s-fss` 的环境模型重构为 OVA 优先的 VM air-gap 运维结构。
+本仓库聚焦于：
+- VM 安装与初始化
+- OVA 构建与导出
+- air-gap 环境部署与运维
 
-最新结构与命令请优先参考：
+请先阅读：
 - `README.md`
-- `QUICKSTART.md`
-- `docs/migration-fss-ova-airgap.md`
-
-当前标准目录：
-- `applications/`
-- `manifests/`
-- `infra/<IP>/`
+- `CHECKLIST.md`
+- `docs/phase-1-build-ova.md`
+- `docs/phase-2-ova-solution-ops.md`
+- `docs/phase-3-install-airgap-from-ova.md`

@@ -1,13 +1,13 @@
-# k8s-fss-ova-airgap
+# k8s-jupyter VM/OVA Air-gap Toolkit
 
-This repository was reorganized around the `/home/ubuntu/k8s-fss` environment model for OVA-first VM air-gap operations.
+This repository is focused on:
+- VM installation/bootstrap
+- OVA build/export
+- Air-gapped installation and operation
 
-Please use the Korean main guide for the latest structure and commands:
+Start with:
 - `README.md`
-- `QUICKSTART.md`
-- `docs/migration-fss-ova-airgap.md`
-
-Current canonical layout:
-- `applications/`
-- `manifests/`
-- `infra/<IP>/`
+- `CHECKLIST.md`
+- `docs/phase-1-build-ova.md`
+- `docs/phase-2-ova-solution-ops.md`
+- `docs/phase-3-install-airgap-from-ova.md`
