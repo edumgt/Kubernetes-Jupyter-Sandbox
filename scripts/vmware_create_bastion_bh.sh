@@ -20,8 +20,8 @@ SSH_PASSWORD="${SSH_PASSWORD:-}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 SSH_PORT="${SSH_PORT:-22}"
 
-SETUP_DISADM=1
-DISADM_PASSWORD="${DISADM_PASSWORD:-CHANGE_ME}"
+SETUP_EDUMGT=1
+EDUMGT_PASSWORD="${EDUMGT_PASSWORD:-CHANGE_ME}"
 INSTALL_PDSH=1
 PDSH_RCMD_TYPE="${PDSH_RCMD_TYPE:-ssh}"
 PDSH_GROUP_NAME="${PDSH_GROUP_NAME:-k8s-dev}"
@@ -48,7 +48,7 @@ What this script does:
   3) Wait for guest IP from VMware Tools
   4) Configure guest:
      - hostname
-     - disadm account + passwordless sudo
+     - edumgt account + passwordless sudo
      - pdsh/ssh utilities
      - optional static IP
      - optional pdsh host group file
@@ -70,11 +70,11 @@ Options:
   --ssh-key-path PATH        SSH private key path
   --ssh-port PORT            SSH port (default: 22)
 
-  --skip-setup-disadm        Do not create/update disadm user
-  --disadm-password PASS     Password for disadm (default: CHANGE_ME)
+  --skip-setup-edumgt        Do not create/update edumgt user
+  --edumgt-password PASS     Password for edumgt (default: CHANGE_ME)
   --skip-install-pdsh        Skip apt install pdsh/sshpass/openssh-client
   --pdsh-rcmd-type TYPE      pdsh remote cmd type (default: ssh)
-  --pdsh-group-name NAME     pdsh group file name under /home/disadm/.dsh/group (default: k8s-dev)
+  --pdsh-group-name NAME     pdsh group file name under /home/edumgt/.dsh/group (default: k8s-dev)
   --pdsh-group-hosts CSV     Comma-separated host list for pdsh group file
 
   --static-network           Configure static netplan
@@ -375,13 +375,13 @@ while [[ $# -gt 0 ]]; do
       SSH_PORT="$2"
       shift 2
       ;;
-    --skip-setup-disadm)
-      SETUP_DISADM=0
+    --skip-setup-edumgt)
+      SETUP_EDUMGT=0
       shift
       ;;
-    --disadm-password)
-      [[ $# -ge 2 ]] || die "--disadm-password requires a value"
-      DISADM_PASSWORD="$2"
+    --edumgt-password)
+      [[ $# -ge 2 ]] || die "--edumgt-password requires a value"
+      EDUMGT_PASSWORD="$2"
       shift 2
       ;;
     --skip-install-pdsh)
@@ -549,11 +549,11 @@ fi
 log "Configuring bastion guest via SSH (${SSH_USER}@${guest_ip}:${SSH_PORT})"
 ssh_run_sudo "${guest_ip}" "hostnamectl set-hostname '${BASTION_NAME}'"
 
-if [[ "${SETUP_DISADM}" -eq 1 ]]; then
-  escaped_disadm_pw="$(escape_single_quotes "${DISADM_PASSWORD}")"
-  ssh_run_sudo "${guest_ip}" "id -u disadm >/dev/null 2>&1 || useradd -m -s /bin/bash disadm"
-  ssh_run_sudo "${guest_ip}" "printf '%s\n' 'disadm:${escaped_disadm_pw}' | chpasswd"
-  ssh_run_sudo "${guest_ip}" "printf 'disadm ALL=(ALL) NOPASSWD:ALL\n' >/etc/sudoers.d/90-disadm-nopasswd && chmod 440 /etc/sudoers.d/90-disadm-nopasswd"
+if [[ "${SETUP_EDUMGT}" -eq 1 ]]; then
+  escaped_edumgt_pw="$(escape_single_quotes "${EDUMGT_PASSWORD}")"
+  ssh_run_sudo "${guest_ip}" "id -u edumgt >/dev/null 2>&1 || useradd -m -s /bin/bash edumgt"
+  ssh_run_sudo "${guest_ip}" "printf '%s\n' 'edumgt:${escaped_edumgt_pw}' | chpasswd"
+  ssh_run_sudo "${guest_ip}" "printf 'edumgt ALL=(ALL) NOPASSWD:ALL\n' >/etc/sudoers.d/90-edumgt-nopasswd && chmod 440 /etc/sudoers.d/90-edumgt-nopasswd"
 fi
 
 if [[ "${INSTALL_PDSH}" -eq 1 ]]; then
@@ -563,13 +563,13 @@ fi
 if [[ -n "${PDSH_GROUP_HOSTS}" ]]; then
   group_lines="$(printf '%s' "${PDSH_GROUP_HOSTS}" | tr ',' '\n' | sed '/^[[:space:]]*$/d')"
   group_lines_b64="$(printf '%s' "${group_lines}" | base64 -w0)"
-  ssh_run_sudo "${guest_ip}" "install -d -m 0755 -o disadm -g disadm /home/disadm/.dsh/group"
-  ssh_run_sudo "${guest_ip}" "printf '%s' '${group_lines_b64}' | base64 -d >/home/disadm/.dsh/group/${PDSH_GROUP_NAME} && chown disadm:disadm /home/disadm/.dsh/group/${PDSH_GROUP_NAME} && chmod 644 /home/disadm/.dsh/group/${PDSH_GROUP_NAME}"
+  ssh_run_sudo "${guest_ip}" "install -d -m 0755 -o edumgt -g edumgt /home/edumgt/.dsh/group"
+  ssh_run_sudo "${guest_ip}" "printf '%s' '${group_lines_b64}' | base64 -d >/home/edumgt/.dsh/group/${PDSH_GROUP_NAME} && chown edumgt:edumgt /home/edumgt/.dsh/group/${PDSH_GROUP_NAME} && chmod 644 /home/edumgt/.dsh/group/${PDSH_GROUP_NAME}"
 fi
 
 if [[ -n "${PDSH_RCMD_TYPE}" ]]; then
-  ssh_run_sudo "${guest_ip}" "install -d -m 0755 -o disadm -g disadm /home/disadm && printf 'export PDSH_RCMD_TYPE=%s\n' '${PDSH_RCMD_TYPE}' >/home/disadm/.bashrc.pdsh && chown disadm:disadm /home/disadm/.bashrc.pdsh"
-  ssh_run_sudo "${guest_ip}" "grep -q '.bashrc.pdsh' /home/disadm/.bashrc || printf '\n[ -f ~/.bashrc.pdsh ] && . ~/.bashrc.pdsh\n' >> /home/disadm/.bashrc && chown disadm:disadm /home/disadm/.bashrc"
+  ssh_run_sudo "${guest_ip}" "install -d -m 0755 -o edumgt -g edumgt /home/edumgt && printf 'export PDSH_RCMD_TYPE=%s\n' '${PDSH_RCMD_TYPE}' >/home/edumgt/.bashrc.pdsh && chown edumgt:edumgt /home/edumgt/.bashrc.pdsh"
+  ssh_run_sudo "${guest_ip}" "grep -q '.bashrc.pdsh' /home/edumgt/.bashrc || printf '\n[ -f ~/.bashrc.pdsh ] && . ~/.bashrc.pdsh\n' >> /home/edumgt/.bashrc && chown edumgt:edumgt /home/edumgt/.bashrc"
 fi
 
 if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
@@ -616,10 +616,10 @@ if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
   echo "  Static IP: ${STATIC_IP}"
 fi
 echo "  SSH: ssh -p ${SSH_PORT} ${SSH_USER}@${guest_ip}"
-if [[ "${SETUP_DISADM}" -eq 1 ]]; then
-  echo "  DISADM: ssh -p ${SSH_PORT} disadm@${guest_ip}"
+if [[ "${SETUP_EDUMGT}" -eq 1 ]]; then
+  echo "  EDUMGT: ssh -p ${SSH_PORT} edumgt@${guest_ip}"
 fi
 if [[ -n "${PDSH_GROUP_HOSTS}" ]]; then
-  echo "  pdsh test: ssh disadm@${guest_ip} \"pdsh -g ${PDSH_GROUP_NAME} -w ^${PDSH_GROUP_NAME} 'hostname -I'\""
+  echo "  pdsh test: ssh edumgt@${guest_ip} \"pdsh -g ${PDSH_GROUP_NAME} -w ^${PDSH_GROUP_NAME} 'hostname -I'\""
 fi
 

@@ -7,9 +7,9 @@ CHECK_METRICS_API=1
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/verify_fss_vmware_setup.sh [options]
+Usage: bash scripts/verify_edumgt_vmware_setup.sh [options]
 
-Verifies FSS setup state on Kubernetes:
+Verifies EDUMGT setup state on Kubernetes:
   - required namespaces exist
   - metrics APIService is available (optional)
   - pod images in app/dis/infra namespace are Harbor-first
